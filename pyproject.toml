@@ -1,9 +1,18 @@
 [project]
 name = "agentsmith"
 version = "0.1.0"
-description = "Add your description here"
+description = "Autonomous reasoning, code generation, and execution"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.13.4",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]
