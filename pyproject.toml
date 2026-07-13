@@ -5,6 +5,7 @@ description = "Autonomous reasoning, code generation, and execution"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "mcp>=1.28.1",
     "pydantic>=2.13.4",
 ]
 
