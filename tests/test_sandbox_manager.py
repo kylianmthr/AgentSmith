@@ -5,7 +5,7 @@ import pytest
 
 from agent_smith.models.sandbox_config import SandboxConfig
 from agent_smith.sandbox.manager import SandboxManager
-from agent_smith.sandbox.validator import SandboxConfigValidator
+from agent_smith.sandbox.config_validator import SandboxConfigValidator
 
 
 def test_validator_uses_default_config_when_path_is_none() -> None:
