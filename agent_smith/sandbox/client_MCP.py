@@ -1,4 +1,3 @@
-from contextlib import AsyncExitStack
 from typing import Any
 
 from anyio.from_thread import start_blocking_portal
@@ -10,31 +9,41 @@ class SandboxMCPClient:
         self.config = config
         self.portal_context = None
         self.portal = None
-        self.conn: AsyncExitStack | None = None
+        self.stdio_context = None
+        self.session_context = None
         self.session: ClientSession | None = None
 
     def start(self) -> None:
-        """Connect to the MCP server."""
+        # Démarre un portal pour appeler du code async depuis ce code sync.
         self.portal_context = start_blocking_portal()
         self.portal = self.portal_context.__enter__()
-        self.portal.call(self.connect)
 
-    async def connect(self) -> None:
-        self.conn = AsyncExitStack()
-
+        # Décrit la commande qui lancera le serveur MCP en mode stdio.
         server = StdioServerParameters(
-            command=self.config["command"],
-            args=self.config.get("args", []),
-            cwd=self.config.get("cwd"),
+            command=self.config["command"], # python3
+            args=self.config.get("args", []), # mcp_tools_mbpp.py --task task.json par ex
+            cwd=self.config.get("cwd"), # le path de lancement genre /home/user/AgentSmith
         )
-        read_stream, write_stream = await self.conn.enter_async_context(
+
+        # Lance le serveur MCP et ouvre les flux read/write avec lui.
+        self.stdio_context = self.portal.wrap_async_context_manager(
             stdio_client(server)
         )
-        self.session = await self.conn.enter_async_context(
+        read_stream, write_stream = self.stdio_context.__enter__()
+
+        # Crée une session MCP au-dessus des flux read/write.
+        self.session_context = self.portal.wrap_async_context_manager(
             ClientSession(read_stream, write_stream)
         )
+        self.session = self.session_context.__enter__()
 
-        await self.session.initialize()
+        # on initialise tout ça
+        self.portal.call(self.session.initialize)
+
+        # en gros:
+        # portal_context = permet d'appeler du code async depuis notre code normal
+        # stdio_context = lance le serveur MCP et ouvre la communication avec lui
+        # session_context = utilise cette communication pour envoyer des requêtes MCP
 
     def stop(self) -> None:
         """Close connection / process."""
