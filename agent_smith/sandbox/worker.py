@@ -8,7 +8,7 @@ from agent_smith.sandbox.code_validator import (
     SandboxCodeValidator,
     SandboxCodeValidatorErr,
 )
-
+from agent_smith.sandbox.client_MCP import SandboxMCPClient
 
 class SandboxWorker:
     def __init__(
@@ -16,11 +16,16 @@ class SandboxWorker:
         input_queue: Queue,
         output_queue: Queue,
         authorized_imports: list[str],
+        mcp_config: dict | None = None,
     ) -> None:
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.authorized_imports = authorized_imports
         self.final_answer_value: str | None = None
+        self.mcp_client = None
+        if mcp_config is not None:
+            self.mcp_client = SandboxMCPClient(mcp_config)
+            self.mcp_client.start()
         self.namespace = self.create_namespace()
 
     def create_namespace(self) -> dict:
@@ -44,10 +49,13 @@ class SandboxWorker:
             "abs": abs,
             "sorted": sorted,
         }
-        return {
+        namespace = {
             "__builtins__": allowed_builtins,
             "final_answer": self.final_answer,
         }
+        if self.mcp_client is not None:
+            namespace.update(self.mcp_client.create_tool_wrappers())
+        return namespace
 
     def final_answer(self, value: str) -> None:
         self.final_answer_value = value
@@ -56,6 +64,8 @@ class SandboxWorker:
         while True:
             message = self.input_queue.get()
             if message["type"] == "stop":
+                if self.mcp_client is not None:
+                    self.mcp_client.stop()
                 break
             if message["type"] == "run":
                 self.handle_run(message["code"])
@@ -71,6 +81,8 @@ class SandboxWorker:
             )
             with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
                 exec(python_code, self.namespace, self.namespace)
+                # Uncomment pour voir l'évolution du namespace
+                # print(f"!!! NAMESPACE: {self.namespace} !!!")
 
             self.output_queue.put({
                 "stdout": stdout_buffer.getvalue(),
@@ -103,10 +115,12 @@ def worker_entrypoint(
     input_queue: Queue,
     output_queue: Queue,
     authorized_imports: list[str],
+    mcp_config: dict | None = None,
 ) -> None:
     worker = SandboxWorker(
         input_queue=input_queue,
         output_queue=output_queue,
         authorized_imports=authorized_imports,
+        mcp_config=mcp_config,
     )
     worker.loop()

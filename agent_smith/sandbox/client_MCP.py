@@ -61,16 +61,33 @@ class SandboxMCPClient:
         self.portal = None
         self.portal_context = None
 
-    def list_tools(self) -> list[str]:
-        if self.portal is None or self.session is None:
-            raise RuntimeError("MCP client is not started")
+    # Fonction test pour lister les tools, je l'ai pas suppr ça peut peut être servir pour SWE BENCH
+    # def list_tools(self) -> list[str]:
+    #     if self.portal is None or self.session is None:
+    #         raise RuntimeError("MCP client is not started")
 
-        result = self.portal.call(self.session.list_tools)
-        return [tool.name for tool in result.tools]
+    #     result = self.portal.call(self.session.list_tools)
+    #     return [tool.name for tool in result.tools]
 
     def call_tool(self, name: str, arguments: dict) -> str:
         """Call one MCP tool."""
+        if self.portal is None or self.session is None:
+            raise RuntimeError("MCP client is not started")
+        result = self.portal.call(
+            self.session.call_tool,
+            name,
+            arguments,
+        )
+        return "\n".join(
+            content.text
+            for content in result.content
+            if content.type == "text"
+        )
+
 
     def create_tool_wrappers(self) -> dict[str, object]:
         """Return Python callables to inject into worker namespace."""
+        return {"run_tests": self.run_tests_wrapper}
         
+    def run_tests_wrapper(self, code):
+        return self.call_tool("run_tests", {"code": code})

@@ -7,8 +7,13 @@ from agent_smith.sandbox.result import SandboxResult
 from agent_smith.sandbox.worker import worker_entrypoint
 
 class SandboxManager:
-    def __init__(self, config_path: Path | None) -> None:
+    def __init__(
+        self,
+        config_path: Path | None,
+        mcp_config: dict | None = None,
+    ) -> None:
         self.config = SandboxConfigValidator.load(config_path)
+        self.mcp_config = mcp_config
         self.input_queue = Queue()
         self.output_queue = Queue()
         self.process: Process | None = None
@@ -23,6 +28,7 @@ class SandboxManager:
                 self.input_queue,
                 self.output_queue,
                 self.config.authorized_imports,
+                self.mcp_config,
             ),
         )
         self.process.start()

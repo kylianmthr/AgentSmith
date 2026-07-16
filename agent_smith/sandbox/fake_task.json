@@ -1,0 +1,11 @@
+{
+  "task_id": 1,
+  "task_definition": "Write a function add(a, b) that returns the sum of two numbers.",
+  "function_definition": "def add(a, b):",
+  "test_imports": [],
+  "test_list": [
+    "assert add(2, 3) == 5",
+    "assert add(-1, 1) == 0",
+    "assert add(10, 0) == 10"
+  ]
+}
