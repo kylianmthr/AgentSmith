@@ -46,10 +46,27 @@ class SandboxMCPClient:
         # session_context = utilise cette communication pour envoyer des requêtes MCP
 
     def stop(self) -> None:
-        """Close connection / process."""
+        if self.session_context is not None:
+            self.session_context.__exit__(None, None, None)
+
+        if self.stdio_context is not None:
+            self.stdio_context.__exit__(None, None, None)
+
+        if self.portal_context is not None:
+            self.portal_context.__exit__(None, None, None)
+
+        self.session = None
+        self.session_context = None
+        self.stdio_context = None
+        self.portal = None
+        self.portal_context = None
 
     def list_tools(self) -> list[str]:
-        """Return available tool names."""
+        if self.portal is None or self.session is None:
+            raise RuntimeError("MCP client is not started")
+
+        result = self.portal.call(self.session.list_tools)
+        return [tool.name for tool in result.tools]
 
     def call_tool(self, name: str, arguments: dict) -> str:
         """Call one MCP tool."""
