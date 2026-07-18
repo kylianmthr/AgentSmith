@@ -62,12 +62,12 @@ class SandboxMCPClient:
         self.portal_context = None
 
     # Fonction test pour lister les tools, je l'ai pas suppr ça peut peut être servir pour SWE BENCH
-    # def list_tools(self) -> list[str]:
-    #     if self.portal is None or self.session is None:
-    #         raise RuntimeError("MCP client is not started")
+    def list_tools(self) -> list[str]:
+        if self.portal is None or self.session is None:
+            raise RuntimeError("MCP client is not started")
 
-    #     result = self.portal.call(self.session.list_tools)
-    #     return [tool.name for tool in result.tools]
+        result = self.portal.call(self.session.list_tools)
+        return [tool.name for tool in result.tools]
 
     def call_tool(self, name: str, arguments: dict) -> str:
         """Call one MCP tool."""
