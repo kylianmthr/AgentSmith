@@ -1,23 +1,39 @@
 from multiprocessing import Process, Queue
 from queue import Empty
 from pathlib import Path
+from typing import Any
+from pydantic import ValidationError
 
-from agent_smith.sandbox.config_validator import SandboxConfigValidator
+from agent_smith.sandbox.config_validator import SandboxConfigValidator, SandboxConfigError
+from agent_smith.models.mcp_config import SandboxMCPConfig
 from agent_smith.sandbox.result import SandboxResult
 from agent_smith.sandbox.worker import worker_entrypoint
+
+class SandboxManagerError(Exception):
+    pass
 
 class SandboxManager:
     def __init__(
         self,
         config_path: Path | None,
-        mcp_config: dict | None = None,
+        mcp_config: dict[str, Any] | None = None,
     ) -> None:
-        self.config = SandboxConfigValidator.load(config_path)
-        self.mcp_config = mcp_config
-        self.input_queue = Queue()
-        self.output_queue = Queue()
-        self.process: Process | None = None
-        self.history: list[SandboxResult] = []
+        try:
+            self.config = SandboxConfigValidator.load(config_path)
+            if mcp_config is None:
+                self.mcp_config = None
+            else:
+                self.mcp_config = SandboxMCPConfig(**mcp_config).model_dump()
+            self.input_queue = Queue()
+            self.output_queue = Queue()
+            self.process: Process | None = None
+            self.history: list[SandboxResult] = []
+        except (
+            SandboxConfigError,
+            ValidationError,
+            TypeError
+        ) as e:
+            raise SandboxManagerError(e)
 
     def start(self) -> None:
         if self.process is not None and self.process.is_alive():

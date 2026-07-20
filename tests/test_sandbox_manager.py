@@ -5,7 +5,10 @@ import pytest
 
 from agent_smith.models.sandbox_config import SandboxConfig
 from agent_smith.sandbox.manager import SandboxManager
-from agent_smith.sandbox.config_validator import SandboxConfigValidator
+from agent_smith.sandbox.config_validator import (
+    SandboxConfigError,
+    SandboxConfigValidator,
+)
 
 
 def test_validator_uses_default_config_when_path_is_none() -> None:
@@ -39,7 +42,7 @@ def test_validator_loads_valid_json_config(tmp_path: Path) -> None:
 def test_validator_rejects_missing_config_file(tmp_path: Path) -> None:
     missing_path = tmp_path / "missing.json"
 
-    with pytest.raises(ValueError, match="Sandbox configuration not found"):
+    with pytest.raises(SandboxConfigError, match="Sandbox configuration not found"):
         SandboxConfigValidator.load(missing_path)
 
 
@@ -47,7 +50,7 @@ def test_validator_rejects_invalid_json(tmp_path: Path) -> None:
     config_path = tmp_path / "invalid.json"
     config_path.write_text("not valid JSON", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Invalid sandbox configuration"):
+    with pytest.raises(SandboxConfigError, match="Invalid sandbox configuration"):
         SandboxConfigValidator.load(config_path)
 
 
@@ -58,7 +61,7 @@ def test_validator_rejects_invalid_config_schema(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="Invalid sandbox configuration"):
+    with pytest.raises(SandboxConfigError, match="Invalid sandbox configuration"):
         SandboxConfigValidator.load(config_path)
 
 

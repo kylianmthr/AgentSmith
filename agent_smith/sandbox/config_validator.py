@@ -2,6 +2,8 @@ from pydantic import ValidationError
 from agent_smith.models.sandbox_config import SandboxConfig
 from pathlib import Path
 
+class SandboxConfigError(Exception):
+    pass
 
 class SandboxConfigValidator:
     @staticmethod
@@ -14,16 +16,16 @@ class SandboxConfigValidator:
             return SandboxConfig.model_validate_json(config_json)
 
         except FileNotFoundError as error:
-            raise ValueError(
+            raise SandboxConfigError(
                 f"Sandbox configuration not found: {config_path}"
             ) from error
 
         except OSError as error:
-            raise ValueError(
+            raise SandboxConfigError(
                 f"Cannot read sandbox configuration: {config_path}"
             ) from error
 
         except ValidationError as error:
-            raise ValueError(
+            raise SandboxConfigError(
                 f"Invalid sandbox configuration: {error}"
             ) from error

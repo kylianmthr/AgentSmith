@@ -10,6 +10,20 @@ dependencies = [
     "pydantic>=2.13.4",
 ]
 
+[project.scripts]
+sandbox = "agent_smith.sandbox.repl:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_smith*", "agent_mbpp*", "agent_swebench*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
