@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from agent_smith.sandbox.config_validator import SandboxConfigValidator, SandboxConfigError
 from agent_smith.models.mcp_config import SandboxMCPConfig
-from agent_smith.sandbox.result import SandboxResult
+from agent_smith.models.result import SandboxResult
 from agent_smith.sandbox.worker import worker_entrypoint
 
 class SandboxManagerError(Exception):

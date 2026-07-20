@@ -9,6 +9,7 @@ from agent_smith.sandbox.code_validator import (
     SandboxCodeValidatorErr,
 )
 from agent_smith.sandbox.client_MCP import SandboxMCPClient
+from agent_smith.sandbox.ast_validator import AstValidator
 
 class SandboxWorker:
     def __init__(
@@ -48,6 +49,7 @@ class SandboxWorker:
             "sum": sum,
             "abs": abs,
             "sorted": sorted,
+            "__import__": self.safe_import,
         }
         namespace = {
             "__builtins__": allowed_builtins,
@@ -81,8 +83,6 @@ class SandboxWorker:
             )
             with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
                 exec(python_code, self.namespace, self.namespace)
-                # Uncomment pour voir l'évolution du namespace
-                # print(f"!!! NAMESPACE: {self.namespace} !!!")
 
             self.output_queue.put({
                 "stdout": stdout_buffer.getvalue(),
@@ -110,6 +110,11 @@ class SandboxWorker:
                 "success": False,
             })
 
+    def safe_import(self, name, globals=None, locals=None, fromlist=(), level=0):
+        if not AstValidator.is_authorized_import(name, self.authorized_imports):
+            raise ImportError(f"Unauthorized import: {name}")
+        return __import__(name, globals, locals, fromlist, level)
+
 
 def worker_entrypoint(
     input_queue: Queue,
@@ -117,10 +122,19 @@ def worker_entrypoint(
     authorized_imports: list[str],
     mcp_config: dict | None = None,
 ) -> None:
-    worker = SandboxWorker(
-        input_queue=input_queue,
-        output_queue=output_queue,
-        authorized_imports=authorized_imports,
-        mcp_config=mcp_config,
-    )
-    worker.loop()
+    try:
+        worker = SandboxWorker(
+            input_queue=input_queue,
+            output_queue=output_queue,
+            authorized_imports=authorized_imports,
+            mcp_config=mcp_config,
+        )
+        worker.loop()
+    except Exception as e:
+        output_queue.put({
+            "stdout": "",
+            "stderr": "",
+            "error": f"Worker startup failed: {e}",
+            "final_answer": None,
+            "success": False,
+        })
