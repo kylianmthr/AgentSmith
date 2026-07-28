@@ -1,0 +1,6 @@
+{
+    "authorized_imports": ["math", "json"],
+    "allowed_directories": ["/tmp/agent"],
+    "max_execution_time_seconds": 10,
+    "max_memory_mb": 128
+}
