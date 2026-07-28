@@ -5,9 +5,11 @@ description = "Autonomous reasoning, code generation, and execution"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "openai>=2.46.0",
     "mcp>=1.28.1",
     "openai>=2.46.0",
     "pydantic>=2.13.4",
+    "pytest>=9.1.1",
 ]
 
 [project.scripts]
@@ -32,3 +34,11 @@ testpaths = ["tests"]
 dev = [
     "pytest>=9.1.1",
 ]
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: start a real server", "slow: try to timeout"]
