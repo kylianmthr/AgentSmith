@@ -1,16 +1,39 @@
 [project]
 name = "agentsmith"
 version = "0.1.0"
-description = "Add your description here"
+description = "Autonomous reasoning, code generation, and execution"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "openai>=2.46.0",
     "mcp>=1.28.1",
+    "openai>=2.46.0",
     "pydantic>=2.13.4",
     "pytest>=9.1.1",
 ]
 
+[project.scripts]
+sandbox = "agent_smith.sandbox.repl:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_smith*", "agent_mbpp*", "agent_swebench*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
 [dependency-groups]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 
