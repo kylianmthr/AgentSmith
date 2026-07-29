@@ -91,6 +91,7 @@ def build_mcp_stdio_config(args: str) -> dict[str, Any]:
         "command": command,
         "args": parts[1:],
         "cwd": Path.cwd(),
+        "transport": "stdio",
     }
 
 
@@ -121,9 +122,10 @@ def parse_args() -> tuple[Path | None, dict[str, Any] | None]:
     if args.mcp_stdio:
         mcp_config = build_mcp_stdio_config(args.mcp_stdio)
     if args.mcp_server:
-        raise REPLError(
-            "--mcp-server is parsed but HTTP MCP is not implemented yet"
-        )
+        mcp_config = {
+            "transport": "http",
+            "url": args.mcp_server,
+        }
     if args.config_path is not None and args.config_path.suffix != ".json":
         raise REPLError("Config must be a JSON file")
     return (args.config_path, mcp_config)
