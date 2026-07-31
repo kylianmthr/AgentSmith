@@ -1,5 +1,6 @@
 from typing import Any
 import subprocess
+import socket
 import time
 from anyio.from_thread import BlockingPortal
 from urllib.parse import urlparse
@@ -17,21 +18,36 @@ class HttpHandle:
         self.http_launched = False
         self.http_server_process = None
 
+
     def handle_http(self) -> tuple[Any, Any]:
-        try:
-            return self.connect_http()
-        except Exception:
-            if not self.config.get("args"):
-                raise HttpHandleErr("Need args to connect to Http MCP")
+        if self.config.get("args") and not self.is_server_reachable():
             self.start_http_server()
             self.http_launched = True
+            self.wait_for_server()
+        return self.connect_http()
+
+    def wait_for_server(self) -> None:
         for _ in range(20):
+            if self.is_server_reachable():
+                return
             time.sleep(0.25)
-            try:
-                return self.connect_http()
-            except Exception:
-                continue
-        raise HttpHandleErr("HTTP MCP not started")
+        raise HttpHandleErr("HTTP MCP server did not start")
+
+    def is_server_reachable(self) -> bool:
+        parsed = urlparse(self.config["url"])
+        print(parsed)
+        if not parsed.hostname:
+            return False
+        if parsed.port is None:
+            return False
+        try:
+            with socket.create_connection(
+                (parsed.hostname, parsed.port),
+                timeout=0.5,
+            ):
+                return True
+        except OSError:
+            return False
 
     def connect_http(self):
         url = self.config.get("url")
@@ -46,15 +62,11 @@ class HttpHandle:
 
     def start_http_server(self) -> None:
         parsed = urlparse(self.config["url"])
-
         if not parsed.hostname:
             raise HttpHandleErr("HTTP URL must include a hostname")
-
         if parsed.port is None:
             raise HttpHandleErr("HTTP URL must include a port")
-
         path = parsed.path or "/mcp"
-
         http_args = [
             *self.config.get("args", []),
             "--transport",
