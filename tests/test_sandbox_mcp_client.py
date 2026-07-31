@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from agent_smith.sandbox.client_MCP import SandboxMCPClient
+from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 
 
 def test_mcp_client_connects_to_stdio_server_and_lists_tools() -> None:
@@ -16,7 +16,7 @@ def test_mcp_client_connects_to_stdio_server_and_lists_tools() -> None:
     try:
         client.start()
 
-        assert "run_tests" in client.list_tools()
+        assert "run_tests" in client.tools.list_tools()
 
     finally:
         client.stop()

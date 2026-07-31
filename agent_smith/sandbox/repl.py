@@ -2,6 +2,7 @@ from pathlib import Path
 import codeop
 from typing import Any
 import argparse
+from urllib.parse import urlparse
 import shlex
 from shutil import which
 
@@ -73,7 +74,7 @@ class REPLInteractive:
                 print(f"    -> Check forbidden imports, functions, crash on code execution, infinite loops...")
             print("*************************************")
 
-def build_mcp_stdio_config(args: str) -> dict[str, Any]:
+def build_mcp_config_with_task(args: str) -> dict[str, Any]:
     try:
         parts = shlex.split(args)
     except ValueError as error:
@@ -91,7 +92,6 @@ def build_mcp_stdio_config(args: str) -> dict[str, Any]:
         "command": command,
         "args": parts[1:],
         "cwd": Path.cwd(),
-        "transport": "stdio",
     }
 
 
@@ -112,6 +112,11 @@ def parse_args() -> tuple[Path | None, dict[str, Any] | None]:
         type=str,
         default=None,
     )
+    parser.add_argument(
+        "--autostart",
+        type=str,
+        default=None,
+    )
     args = parser.parse_args()
 
     if args.mcp_stdio and args.mcp_server:
@@ -120,12 +125,16 @@ def parse_args() -> tuple[Path | None, dict[str, Any] | None]:
         )
     mcp_config = None
     if args.mcp_stdio:
-        mcp_config = build_mcp_stdio_config(args.mcp_stdio)
+        mcp_config = build_mcp_config_with_task(args.mcp_stdio)
+        mcp_config.update({"transport": "stdio"})
     if args.mcp_server:
         mcp_config = {
             "transport": "http",
             "url": args.mcp_server,
         }
+        if args.autostart:
+            autostart_config = build_mcp_config_with_task(args.autostart)
+            mcp_config.update(autostart_config)
     if args.config_path is not None and args.config_path.suffix != ".json":
         raise REPLError("Config must be a JSON file")
     return (args.config_path, mcp_config)

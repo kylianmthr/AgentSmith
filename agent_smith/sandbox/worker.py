@@ -8,7 +8,7 @@ from agent_smith.sandbox.code_validator import (
     SandboxCodeValidator,
     SandboxCodeValidatorErr,
 )
-from agent_smith.sandbox.client_MCP import SandboxMCPClient
+from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
 
 class SandboxWorker:
@@ -56,7 +56,7 @@ class SandboxWorker:
             "final_answer": self.final_answer,
         }
         if self.mcp_client is not None:
-            namespace.update(self.mcp_client.create_tool_wrappers())
+            namespace.update(self.mcp_client.tools.create_tool_wrappers())
         return namespace
 
     def final_answer(self, value: str) -> None:

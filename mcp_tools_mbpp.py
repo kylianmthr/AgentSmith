@@ -178,11 +178,49 @@ if __name__ == "__main__":
         default=TransportType.STDIO,
         help="The transport type of the mcp server, could be stdio or http",
     )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Host for HTTP MCP server",
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for HTTP MCP server",
+    )
+
+    parser.add_argument(
+        "--path",
+        type=str,
+        default="/mcp",
+        help="Path for HTTP MCP server",
+    )
+
+    
     args = parser.parse_args()
     if args.task:
         if not load_task_file(args.task):
             sys.exit(1)
+
     if args.transport == TransportType.STDIO:
         mcp.run(transport="stdio", show_banner=False, log_level="ERROR")
     else:
-        mcp.run(transport="http", show_banner=False, log_level="ERROR")
+        if not args.host.strip():
+            parser.error("--host cannot be empty")
+        if args.port <= 0 or args.port > 65535:
+            parser.error("--port must be between 1 and 65535")
+        if not args.path.strip():
+            parser.error("--path cannot be empty")
+        if not args.path.startswith("/"):
+            args.path = "/" + args.path
+        mcp.run(
+            transport="http",
+            host=args.host,
+            port=args.port,
+            path=args.path,
+            show_banner=False,
+            log_level="ERROR",
+        )

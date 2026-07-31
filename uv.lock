@@ -6,6 +6,7 @@ resolution-markers = [
     "python_full_version >= '3.11' and python_full_version < '3.14'",
     "python_full_version < '3.11'",
 ]
+
 [[package]]
 name = "agentsmith"
 version = "0.1.0"
@@ -28,7 +29,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">=3.4.5,<4" },
-    { name = "mcp", specifier = ">=1.28.1,<2" },
+    { name = "mcp", specifier = ">=1.28.1" },
     { name = "openai", specifier = ">=2.46.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pytest", specifier = ">=9.1.1" },

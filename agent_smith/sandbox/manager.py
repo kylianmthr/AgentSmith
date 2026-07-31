@@ -11,6 +11,44 @@ class SandboxManagerError(Exception):
     pass
 
 class SandboxManager:
+    """
+    Usage:
+
+    NO MCP:
+    uv run sandbox
+
+    NO MCP + custom sandbox config:
+    uv run sandbox sandbox_config.json
+
+    STDIO MCP:
+    uv run sandbox --mcp-stdio "python3 mcp_tools_mbpp.py --task task.json"
+
+    STDIO MCP + custom sandbox config:
+    uv run sandbox --mcp-stdio "python3 mcp_tools_mbpp.py --task task.json" sandbox_config.json
+
+    HTTP MCP, server already running:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp
+
+    HTTP MCP, server already running + custom sandbox config:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp sandbox_config.json
+
+    HTTP MCP with autostart:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp --autostart "python3 mcp_tools_mbpp.py --task task.json"
+
+    HTTP MCP with autostart + custom sandbox config:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp --autostart "python3 mcp_tools_mbpp.py --task task.json" sandbox_config.json
+    
+    To run HTTP server independently:
+    uv run python mcp_tools_mbpp.py \
+    --transport http \
+    --task task.json \
+    --host 127.0.0.1 \
+    --port 9000 \
+    --path /mcp
+    then in another terminal:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp
+    """
+
     def __init__(
         self,
         config_path: Path | None,
