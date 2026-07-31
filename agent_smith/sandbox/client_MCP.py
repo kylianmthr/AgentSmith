@@ -13,6 +13,8 @@ class SandboxMCPClientError(Exception):
 
 class SandboxMCPClient:
     def __init__(self, config: dict[str, Any]) -> None:
+        if not config:
+            raise SandboxMCPClientError("MCP config cannot be empty")
         try:
             self.config = SandboxMCPConfig.model_validate(config).model_dump()
         except ValidationError as error:
@@ -66,7 +68,8 @@ class SandboxMCPClient:
             )
             read_stream, write_stream = self.stdio_context.__enter__()
             return (read_stream, write_stream)
-        elif transport == "http":
+
+        if transport == "http":
             url = self.config.get("url")
             if not url:
                 raise SandboxMCPClientError("HTTP MCP transport requires a url")
@@ -74,8 +77,10 @@ class SandboxMCPClient:
                 streamable_http_client(url)
             )
 
-            read_stream, write_stream, _ = self.http_context.__enter__()
+            streams = self.http_context.__enter__()
+            read_stream, write_stream = streams[:2]
             return read_stream, write_stream
+
         raise SandboxMCPClientError(f"Unsupported MCP transport: {transport}")
 
 

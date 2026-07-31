@@ -52,6 +52,7 @@ class TestBuildMCPStdioConfig:
         assert config["command"] == "node"
         assert config["args"] == ["server.js", "--stdio"]
         assert config["cwd"] == Path.cwd()
+        assert config["transport"] == "stdio"
 
     def test_preserves_quoted_arguments(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(repl_module, "which", lambda command: f"/usr/bin/{command}")
@@ -116,16 +117,22 @@ class TestParseArgs:
             "command": "python",
             "args": ["mcp_tools_mbpp.py", "--task", "task.json"],
             "cwd": Path.cwd(),
+            "transport": "stdio",
         }
 
-    def test_rejects_mcp_server_until_http_is_implemented(
+    def test_builds_http_mcp_config(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(sys, "argv", ["sandbox", "--mcp-server", "http://localhost"])
 
-        with pytest.raises(REPLError, match="HTTP MCP is not implemented"):
-            parse_args()
+        config_path, mcp_config = parse_args()
+
+        assert config_path is None
+        assert mcp_config == {
+            "transport": "http",
+            "url": "http://localhost",
+        }
 
     def test_rejects_stdio_and_http_together(
         self,

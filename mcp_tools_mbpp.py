@@ -3,7 +3,7 @@ import subprocess
 import sys
 import argparse
 import logging
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from agent_smith.models.task_input import MBPPTaskInput
 
@@ -183,6 +183,6 @@ if __name__ == "__main__":
         if not load_task_file(args.task):
             sys.exit(1)
     if args.transport == TransportType.STDIO:
-        mcp.run(transport="stdio")
+        mcp.run(transport="stdio", show_banner=False, log_level="ERROR")
     else:
-        mcp.run(transport="streamable-http")
+        mcp.run(transport="http", show_banner=False, log_level="ERROR")
