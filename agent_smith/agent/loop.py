@@ -47,18 +47,18 @@ class Agent:
         ]
         dotenv = DotEnvLoader()
         dotenv.load()
-        if not dotenv.api_key:
-            raise ValueError("API Key not defined.")
-        client = Client(
-            api_url=self.provider,
-            model_name=self.model_name,
-            max_tokens=self.limits,
-            api_key=dotenv.api_key,
-        )
-        extractor = CodeExtractor()
-        i = 0
         start_time = time.time()
         try:
+            if not dotenv.api_key:
+                raise ValueError("API Key not defined.")
+            client = Client(
+                api_url=self.provider,
+                model_name=self.model_name,
+                max_tokens=self.limits,
+                api_key=dotenv.api_key,
+            )
+            extractor = CodeExtractor()
+            i = 0
             while i < 10:
                 self.result.iterations += 1
                 res = client.generate(conversation=history)
