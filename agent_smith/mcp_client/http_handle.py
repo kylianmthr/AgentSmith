@@ -20,10 +20,13 @@ class HttpHandle:
 
 
     def handle_http(self) -> tuple[Any, Any]:
-        if self.config.get("args") and not self.is_server_reachable():
-            self.start_http_server()
-            self.http_launched = True
-            self.wait_for_server()
+        if self.is_server_reachable():
+            return self.connect_http()
+        if not self.config.get("args"):
+            raise HttpHandleErr("Couldn't connect to http server (missing args)")
+        self.start_http_server()
+        self.http_launched = True
+        self.wait_for_server()
         return self.connect_http()
 
     def wait_for_server(self) -> None:
@@ -35,7 +38,6 @@ class HttpHandle:
 
     def is_server_reachable(self) -> bool:
         parsed = urlparse(self.config["url"])
-        print(parsed)
         if not parsed.hostname:
             return False
         if parsed.port is None:
@@ -53,6 +55,12 @@ class HttpHandle:
         url = self.config.get("url")
         if not url:
             raise HttpHandleErr("Missing URL")
+        parsed = urlparse(url)
+        if not parsed.path or parsed.path == "/":
+            url = url.rstrip("/") + "/mcp"
+        else:
+            url = url.rstrip("/")
+
         self.http_context = self.portal.wrap_async_context_manager(
             streamable_http_client(url)
         )
@@ -66,7 +74,9 @@ class HttpHandle:
             raise HttpHandleErr("HTTP URL must include a hostname")
         if parsed.port is None:
             raise HttpHandleErr("HTTP URL must include a port")
-        path = parsed.path or "/mcp"
+        path = parsed.path
+        if not path or path == "/":
+            path = "/mcp"
         http_args = [
             *self.config.get("args", []),
             "--transport",
@@ -85,6 +95,7 @@ class HttpHandle:
                 *http_args,
             ],
             cwd=self.config.get("cwd"),
+            start_new_session=True,
         )
         
     def stop(self) -> None:
@@ -92,4 +103,12 @@ class HttpHandle:
             self.http_context.__exit__(None, None, None)
             self.http_context = None
         if self.http_launched and self.http_server_process is not None:
-            self.http_server_process.terminate()
+            try:
+                self.http_server_process.terminate()
+                self.http_server_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.http_server_process.kill()
+                self.http_server_process.wait(timeout=2)
+            finally:
+                self.http_server_process = None
+                self.http_launched = False

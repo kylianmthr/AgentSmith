@@ -109,13 +109,14 @@ class SandboxManager:
     def stop(self, force: bool = False) -> None:
         if self.process is None:
             return
-        if force:
-            self.process.terminate()
-            self.process.join()
+        try:
+            if force:
+                self.process.terminate()
+            elif self.process.is_alive():
+                self.input_queue.put({"type": "stop"})
+            self.process.join(timeout=2)
+            if self.process.is_alive():
+                self.process.kill()
+                self.process.join(timeout=2)
+        finally:
             self.process = None
-            return
-        if self.process.is_alive():
-            self.input_queue.put({"type": "stop"})
-            self.process.join()
-
-        self.process = None

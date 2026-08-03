@@ -1,13 +1,17 @@
-from pathlib import Path
-import codeop
-from typing import Any
-import argparse
-from urllib.parse import urlparse
-import shlex
-from shutil import which
+import sys
+try:
+    from pathlib import Path
+    import codeop
+    from typing import Any
+    import argparse
+    from urllib.parse import urlparse
+    import shlex
+    from shutil import which
 
-from agent_smith.sandbox.manager import SandboxManager, SandboxManagerError
-from agent_smith.models.result import SandboxResult
+    from agent_smith.sandbox.manager import SandboxManager, SandboxManagerError
+    from agent_smith.models.result import SandboxResult
+except KeyboardInterrupt:
+    sys.exit(1)
 
 class REPLError(Exception):
     pass
@@ -45,10 +49,14 @@ class REPLInteractive:
 
                 result = self.sandbox.run(python_code)
                 self.display_result(result)
+                if result.error and result.error.startswith("Worker startup failed"):
+                    break
                 self.buffer.clear()
                 prompt = "sandbox> "        
         except EOFError:
             pass
+        except KeyboardInterrupt:
+            print("\nExiting sandbox.")
         except SandboxManagerError as e:
             raise REPLError(e)
 
@@ -146,5 +154,11 @@ def main() -> None:
         repl = REPLInteractive(config_path, mcp_config)
         repl.run()
     except REPLError as e:
+        print(e)
+        return
+    except KeyboardInterrupt:
+        print("CATCH")
+        return
+    except Exception as e:
         print(e)
         return

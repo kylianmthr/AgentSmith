@@ -4,6 +4,7 @@ import sys
 import argparse
 import logging
 from fastmcp import FastMCP
+import asyncio
 
 from agent_smith.models.task_input import MBPPTaskInput
 
@@ -205,22 +206,33 @@ if __name__ == "__main__":
         if not load_task_file(args.task):
             sys.exit(1)
 
-    if args.transport == TransportType.STDIO:
-        mcp.run(transport="stdio", show_banner=False, log_level="ERROR")
-    else:
-        if not args.host.strip():
-            parser.error("--host cannot be empty")
-        if args.port <= 0 or args.port > 65535:
-            parser.error("--port must be between 1 and 65535")
-        if not args.path.strip():
-            parser.error("--path cannot be empty")
-        if not args.path.startswith("/"):
-            args.path = "/" + args.path
-        mcp.run(
-            transport="http",
-            host=args.host,
-            port=args.port,
-            path=args.path,
-            show_banner=False,
-            log_level="ERROR",
-        )
+    try:
+        if args.transport == TransportType.STDIO:
+            mcp.run(
+                transport="stdio",
+                show_banner=False,
+                log_level="ERROR",
+            )
+        else:
+            if not args.host.strip():
+                parser.error("--host cannot be empty")
+            if args.port <= 0 or args.port > 65535:
+                parser.error("--port must be between 1 and 65535")
+            if not args.path.strip():
+                parser.error("--path cannot be empty")
+            if not args.path.startswith("/"):
+                args.path = "/" + args.path
+
+            mcp.run(
+                transport="http",
+                host=args.host,
+                port=args.port,
+                path=args.path,
+                show_banner=False,
+                log_level="ERROR",
+            )
+
+    except KeyboardInterrupt:
+        pass
+    except asyncio.CancelledError:
+        pass

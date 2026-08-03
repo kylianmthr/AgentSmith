@@ -9,9 +9,17 @@ from agent_smith.mcp_client import http_handle as http_handle_module
 class FakeProcess:
     def __init__(self) -> None:
         self.terminated = False
+        self.killed = False
+        self.wait_calls = []
 
     def terminate(self) -> None:
         self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout=None) -> None:
+        self.wait_calls.append(timeout)
 
 
 def test_start_http_server_adds_transport_host_port_and_path(
@@ -21,9 +29,10 @@ def test_start_http_server_adds_transport_host_port_and_path(
     captured: dict = {}
     fake_process = FakeProcess()
 
-    def fake_popen(command, cwd=None):
+    def fake_popen(command, cwd=None, start_new_session=False):
         captured["command"] = command
         captured["cwd"] = cwd
+        captured["start_new_session"] = start_new_session
         return fake_process
 
     monkeypatch.setattr(http_handle_module.subprocess, "Popen", fake_popen)
@@ -56,6 +65,7 @@ def test_start_http_server_adds_transport_host_port_and_path(
         "--path",
         "/custom-mcp",
     ]
+    assert captured["start_new_session"] is True
     assert handle.http_server_process is fake_process
 
 
@@ -65,9 +75,10 @@ def test_start_http_server_defaults_to_mcp_path_when_url_has_no_path(
 ) -> None:
     captured: dict = {}
 
-    def fake_popen(command, cwd=None):
+    def fake_popen(command, cwd=None, start_new_session=False):
         captured["command"] = command
         captured["cwd"] = cwd
+        captured["start_new_session"] = start_new_session
         return FakeProcess()
 
     monkeypatch.setattr(http_handle_module.subprocess, "Popen", fake_popen)
@@ -86,6 +97,7 @@ def test_start_http_server_defaults_to_mcp_path_when_url_has_no_path(
     handle.start_http_server()
 
     assert captured["command"][-2:] == ["--path", "/mcp"]
+    assert captured["start_new_session"] is True
 
 
 def test_start_http_server_rejects_url_without_hostname() -> None:
@@ -129,15 +141,19 @@ def test_handle_http_without_autostart_args_fails_cleanly(
             "args": [],
         },
     )
+    calls = {"connect": 0}
 
-    monkeypatch.setattr(
-        handle,
-        "connect_http",
-        lambda: (_ for _ in ()).throw(RuntimeError("connection refused")),
-    )
+    def fake_connect_http():
+        calls["connect"] += 1
+        return "read_stream", "write_stream"
 
-    with pytest.raises(HttpHandleErr, match="Need args"):
+    monkeypatch.setattr(handle, "is_server_reachable", lambda: False)
+    monkeypatch.setattr(handle, "connect_http", fake_connect_http)
+
+    with pytest.raises(HttpHandleErr, match="missing args"):
         handle.handle_http()
+
+    assert calls["connect"] == 0
 
 
 def test_handle_http_autostarts_then_returns_streams(
@@ -152,23 +168,25 @@ def test_handle_http_autostarts_then_returns_streams(
             "args": ["mcp_tools_mbpp.py", "--task", "task.json"],
         },
     )
-    calls = {"connect": 0, "start": 0}
+    calls = {"connect": 0, "start": 0, "wait": 0}
 
     def fake_connect_http():
         calls["connect"] += 1
-        if calls["connect"] == 1:
-            raise RuntimeError("connection refused")
         return "read_stream", "write_stream"
 
     def fake_start_http_server():
         calls["start"] += 1
 
+    def fake_wait_for_server():
+        calls["wait"] += 1
+
+    monkeypatch.setattr(handle, "is_server_reachable", lambda: False)
     monkeypatch.setattr(handle, "connect_http", fake_connect_http)
     monkeypatch.setattr(handle, "start_http_server", fake_start_http_server)
-    monkeypatch.setattr(http_handle_module.time, "sleep", lambda _: None)
+    monkeypatch.setattr(handle, "wait_for_server", fake_wait_for_server)
 
     assert handle.handle_http() == ("read_stream", "write_stream")
-    assert calls == {"connect": 2, "start": 1}
+    assert calls == {"connect": 1, "start": 1, "wait": 1}
     assert handle.http_launched is True
 
 
@@ -183,3 +201,7 @@ def test_stop_terminates_only_autostarted_process() -> None:
     handle.http_launched = True
     handle.stop()
     assert process.terminated is True
+    assert process.wait_calls == [2]
+    assert process.killed is False
+    assert handle.http_server_process is None
+    assert handle.http_launched is False

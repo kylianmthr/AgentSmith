@@ -1,5 +1,6 @@
 from anyio.from_thread import BlockingPortal
 from mcp import ClientSession
+from typing import Callable
 
 class ToolsHandle:
     def __init__(self, portal: BlockingPortal, session: ClientSession) -> None:
@@ -7,7 +8,6 @@ class ToolsHandle:
         self.session = session
 
     def list_tools(self) -> list[str]:
-
         result = self.portal.call(self.session.list_tools)
         return [tool.name for tool in result.tools]
 
@@ -27,7 +27,15 @@ class ToolsHandle:
 
     def create_tool_wrappers(self) -> dict[str, object]:
         """Return Python callables to inject into worker namespace."""
-        return {"run_tests": self.run_tests_wrapper}
-        
-    def run_tests_wrapper(self, code):
-        return self.call_tool("run_tests", {"code": code})
+        tools = self.list_tools()
+        wrappers = {}
+        for tool in tools:
+            wrappers[tool] = self.create_single_wrapper(tool)
+        print(wrappers)
+        return wrappers
+
+    def create_single_wrapper(self, tool: str) -> Callable:
+        def wrapper(**kwargs):
+            return self.call_tool(tool, kwargs)
+        return wrapper
+
