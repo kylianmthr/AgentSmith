@@ -11,6 +11,7 @@ from agent_smith.sandbox.code_validator import (
 from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
 
+
 class SandboxWorker:
     def __init__(
         self,
@@ -74,6 +75,11 @@ class SandboxWorker:
     def final_answer(self, value: str) -> None:
         self.final_answer_value = value
 
+    def list_tools(self) -> list[str]:
+        if self.mcp_client is None:
+            return []
+        return self.mcp_client.tools.list_tools()
+
     def loop(self) -> None:
         while True:
             message = self.input_queue.get()
@@ -82,6 +88,8 @@ class SandboxWorker:
                 break
             if message["type"] == "run":
                 self.handle_run(message["code"])
+            if message["type"] == "list_tools":
+                self.output_queue.put(self.list_tools())
 
     def handle_run(self, python_code: str) -> None:
         stdout_buffer = StringIO()
@@ -95,40 +103,48 @@ class SandboxWorker:
             with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
                 exec(python_code, self.namespace, self.namespace)
 
-            self.output_queue.put({
-                "stdout": stdout_buffer.getvalue(),
-                "stderr": stderr_buffer.getvalue(),
-                "error": None,
-                "final_answer": self.final_answer_value,
-                "success": True,
-            })
+            self.output_queue.put(
+                {
+                    "stdout": stdout_buffer.getvalue(),
+                    "stderr": stderr_buffer.getvalue(),
+                    "error": None,
+                    "final_answer": self.final_answer_value,
+                    "success": True,
+                }
+            )
 
         except SandboxCodeValidatorErr as error:
-            self.output_queue.put({
-                "stdout": stdout_buffer.getvalue(),
-                "stderr": stderr_buffer.getvalue(),
-                "error": str(error),
-                "final_answer": self.final_answer_value,
-                "success": False,
-            })
+            self.output_queue.put(
+                {
+                    "stdout": stdout_buffer.getvalue(),
+                    "stderr": stderr_buffer.getvalue(),
+                    "error": str(error),
+                    "final_answer": self.final_answer_value,
+                    "success": False,
+                }
+            )
 
         except SystemExit as error:
-            self.output_queue.put({
-                "stdout": stdout_buffer.getvalue(),
-                "stderr": stderr_buffer.getvalue(),
-                "error": f"SystemExit: {error}",
-                "final_answer": self.final_answer_value,
-                "success": False,
-            })
+            self.output_queue.put(
+                {
+                    "stdout": stdout_buffer.getvalue(),
+                    "stderr": stderr_buffer.getvalue(),
+                    "error": f"SystemExit: {error}",
+                    "final_answer": self.final_answer_value,
+                    "success": False,
+                }
+            )
 
         except Exception as error:
-            self.output_queue.put({
-                "stdout": stdout_buffer.getvalue(),
-                "stderr": stderr_buffer.getvalue(),
-                "error": str(error),
-                "final_answer": self.final_answer_value,
-                "success": False,
-            })
+            self.output_queue.put(
+                {
+                    "stdout": stdout_buffer.getvalue(),
+                    "stderr": stderr_buffer.getvalue(),
+                    "error": str(error),
+                    "final_answer": self.final_answer_value,
+                    "success": False,
+                }
+            )
 
     def safe_import(self, name, globals=None, locals=None, fromlist=(), level=0):
         if not AstValidator.is_authorized_import(name, self.authorized_imports):
@@ -162,13 +178,16 @@ def worker_entrypoint(
         pass
 
     except Exception as e:
-        output_queue.put({
-            "stdout": "",
-            "stderr": "",
-            "error": f"Worker startup failed: {e}",
-            "final_answer": None,
-            "success": False,
-        })
+        output_queue.put(
+            {
+                "stdout": "",
+                "stderr": "",
+                "error": f"Worker startup failed: {e}",
+                "final_answer": None,
+                "success": False,
+            }
+        )
 
     finally:
         worker.cleanup()
+

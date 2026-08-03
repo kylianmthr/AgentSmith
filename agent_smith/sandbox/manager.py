@@ -3,12 +3,17 @@ from queue import Empty
 from pathlib import Path
 from typing import Any
 
-from agent_smith.sandbox.config_validator import SandboxConfigValidator, SandboxConfigError
+from agent_smith.sandbox.config_validator import (
+    SandboxConfigValidator,
+    SandboxConfigError,
+)
 from agent_smith.models.result import SandboxResult
 from agent_smith.sandbox.worker import worker_entrypoint
 
+
 class SandboxManagerError(Exception):
     pass
+
 
 class SandboxManager:
     """
@@ -64,10 +69,7 @@ class SandboxManager:
             self.output_queue = Queue()
             self.process: Process | None = None
             self.history: list[SandboxResult] = []
-        except (
-            SandboxConfigError,
-            TypeError
-        ) as e:
+        except (SandboxConfigError, TypeError) as e:
             raise SandboxManagerError(e)
 
     def start(self) -> None:
@@ -82,14 +84,20 @@ class SandboxManager:
                 self.mcp_config,
             ),
         )
-        self.process.start()
+
+    def list_tools(self) -> list[str]:
+        self.start()
+        self.input_queue.put({"type": "list_tools"})
+        return self.output_queue.get(timeout=self.config.max_execution_time_seconds)
 
     def run(self, python_code: str) -> SandboxResult:
         self.start()
-        self.input_queue.put({
-            "type": "run",
-            "code": python_code,
-        })
+        self.input_queue.put(
+            {
+                "type": "run",
+                "code": python_code,
+            }
+        )
 
         try:
             raw_result = self.output_queue.get(
@@ -120,3 +128,4 @@ class SandboxManager:
                 self.process.join(timeout=2)
         finally:
             self.process = None
+
