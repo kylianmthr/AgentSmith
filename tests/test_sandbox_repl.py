@@ -8,7 +8,7 @@ from agent_smith.sandbox import repl as repl_module
 from agent_smith.sandbox.repl import (
     REPLError,
     REPLInteractive,
-    build_mcp_stdio_config,
+    build_mcp_config_with_task,
     parse_args,
 )
 
@@ -33,30 +33,31 @@ def make_repl_with_fake_sandbox(fake_sandbox: FakeSandbox) -> REPLInteractive:
     return repl
 
 
-class TestBuildMCPStdioConfig:
+class TestBuildMCPConfigWithTask:
     def test_rejects_empty_command(self) -> None:
         with pytest.raises(REPLError, match="cannot be empty"):
-            build_mcp_stdio_config("")
+            build_mcp_config_with_task("")
 
     def test_rejects_unknown_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(repl_module, "which", lambda command: None)
 
         with pytest.raises(REPLError, match="command not found"):
-            build_mcp_stdio_config("blabla.txt aligator --task")
+            build_mcp_config_with_task("blabla.txt aligator --task")
 
     def test_accepts_any_existing_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(repl_module, "which", lambda command: f"/usr/bin/{command}")
 
-        config = build_mcp_stdio_config("node server.js --stdio")
+        config = build_mcp_config_with_task("node server.js --stdio")
 
         assert config["command"] == "node"
         assert config["args"] == ["server.js", "--stdio"]
         assert config["cwd"] == Path.cwd()
+        assert "transport" not in config
 
     def test_preserves_quoted_arguments(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(repl_module, "which", lambda command: f"/usr/bin/{command}")
 
-        config = build_mcp_stdio_config(
+        config = build_mcp_config_with_task(
             'python mcp_tools_mbpp.py --task "tasks/my task.json"'
         )
 
@@ -66,6 +67,7 @@ class TestBuildMCPStdioConfig:
             "--task",
             "tasks/my task.json",
         ]
+        assert "transport" not in config
 
 
 class TestParseArgs:
@@ -116,16 +118,79 @@ class TestParseArgs:
             "command": "python",
             "args": ["mcp_tools_mbpp.py", "--task", "task.json"],
             "cwd": Path.cwd(),
+            "transport": "stdio",
         }
 
-    def test_rejects_mcp_server_until_http_is_implemented(
+    def test_builds_http_mcp_config(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(sys, "argv", ["sandbox", "--mcp-server", "http://localhost"])
 
-        with pytest.raises(REPLError, match="HTTP MCP is not implemented"):
-            parse_args()
+        config_path, mcp_config = parse_args()
+
+        assert config_path is None
+        assert mcp_config == {
+            "transport": "http",
+            "url": "http://localhost",
+        }
+
+    def test_builds_http_mcp_config_with_autostart(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(repl_module, "which", lambda command: f"/usr/bin/{command}")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "sandbox",
+                "--mcp-server",
+                "http://127.0.0.1:9000/mcp",
+                "--autostart",
+                "python mcp_tools_mbpp.py --task task.json",
+            ],
+        )
+
+        config_path, mcp_config = parse_args()
+
+        assert config_path is None
+        assert mcp_config == {
+            "transport": "http",
+            "url": "http://127.0.0.1:9000/mcp",
+            "command": "python",
+            "args": ["mcp_tools_mbpp.py", "--task", "task.json"],
+            "cwd": Path.cwd(),
+        }
+
+    def test_builds_http_autostart_config_with_custom_sandbox_config(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(repl_module, "which", lambda command: f"/usr/bin/{command}")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "sandbox",
+                "--mcp-server",
+                "http://127.0.0.1:9000/mcp",
+                "--autostart",
+                "python mcp_tools_mbpp.py --task task.json",
+                "sandbox_config.json",
+            ],
+        )
+
+        config_path, mcp_config = parse_args()
+
+        assert config_path == Path("sandbox_config.json")
+        assert mcp_config == {
+            "transport": "http",
+            "url": "http://127.0.0.1:9000/mcp",
+            "command": "python",
+            "args": ["mcp_tools_mbpp.py", "--task", "task.json"],
+            "cwd": Path.cwd(),
+        }
 
     def test_rejects_stdio_and_http_together(
         self,

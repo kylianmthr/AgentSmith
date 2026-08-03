@@ -2,10 +2,8 @@ from multiprocessing import Process, Queue
 from queue import Empty
 from pathlib import Path
 from typing import Any
-from pydantic import ValidationError
 
 from agent_smith.sandbox.config_validator import SandboxConfigValidator, SandboxConfigError
-from agent_smith.models.mcp_config import SandboxMCPConfig
 from agent_smith.models.result import SandboxResult
 from agent_smith.sandbox.worker import worker_entrypoint
 
@@ -13,6 +11,44 @@ class SandboxManagerError(Exception):
     pass
 
 class SandboxManager:
+    """
+    Usage:
+
+    NO MCP:
+    uv run sandbox
+
+    NO MCP + custom sandbox config:
+    uv run sandbox sandbox_config.json
+
+    STDIO MCP:
+    uv run sandbox --mcp-stdio "python3 mcp_tools_mbpp.py --task task.json"
+
+    STDIO MCP + custom sandbox config:
+    uv run sandbox --mcp-stdio "python3 mcp_tools_mbpp.py --task task.json" sandbox_config.json
+
+    HTTP MCP, server already running:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp
+
+    HTTP MCP, server already running + custom sandbox config:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp sandbox_config.json
+
+    HTTP MCP with autostart:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp --autostart "python3 mcp_tools_mbpp.py --task task.json"
+
+    HTTP MCP with autostart + custom sandbox config:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp --autostart "python3 mcp_tools_mbpp.py --task task.json" sandbox_config.json
+    
+    To run HTTP server independently:
+    uv run python mcp_tools_mbpp.py \
+    --transport http \
+    --task task.json \
+    --host 127.0.0.1 \
+    --port 9000 \
+    --path /mcp
+    then in another terminal:
+    uv run sandbox --mcp-server http://127.0.0.1:9000/mcp
+    """
+
     def __init__(
         self,
         config_path: Path | None,
@@ -23,14 +59,13 @@ class SandboxManager:
             if mcp_config is None:
                 self.mcp_config = None
             else:
-                self.mcp_config = SandboxMCPConfig(**mcp_config).model_dump()
+                self.mcp_config = mcp_config
             self.input_queue = Queue()
             self.output_queue = Queue()
             self.process: Process | None = None
             self.history: list[SandboxResult] = []
         except (
             SandboxConfigError,
-            ValidationError,
             TypeError
         ) as e:
             raise SandboxManagerError(e)
@@ -74,13 +109,14 @@ class SandboxManager:
     def stop(self, force: bool = False) -> None:
         if self.process is None:
             return
-        if force:
-            self.process.terminate()
-            self.process.join()
+        try:
+            if force:
+                self.process.terminate()
+            elif self.process.is_alive():
+                self.input_queue.put({"type": "stop"})
+            self.process.join(timeout=2)
+            if self.process.is_alive():
+                self.process.kill()
+                self.process.join(timeout=2)
+        finally:
             self.process = None
-            return
-        if self.process.is_alive():
-            self.input_queue.put({"type": "stop"})
-            self.process.join()
-
-        self.process = None

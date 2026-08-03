@@ -8,7 +8,7 @@ from agent_smith.sandbox.code_validator import (
     SandboxCodeValidator,
     SandboxCodeValidatorErr,
 )
-from agent_smith.sandbox.client_MCP import SandboxMCPClient
+from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
 
 class SandboxWorker:
@@ -23,10 +23,22 @@ class SandboxWorker:
         self.output_queue = output_queue
         self.authorized_imports = authorized_imports
         self.final_answer_value: str | None = None
+        self.mcp_config = mcp_config
         self.mcp_client = None
-        if mcp_config is not None:
-            self.mcp_client = SandboxMCPClient(mcp_config)
+        self.namespace = self.create_namespace()
+
+    def start(self) -> None:
+        if self.mcp_config is None:
+            return
+
+        self.mcp_client = SandboxMCPClient(self.mcp_config)
+
+        try:
             self.mcp_client.start()
+        except BaseException:
+            self.cleanup()
+            raise
+
         self.namespace = self.create_namespace()
 
     def create_namespace(self) -> dict:
@@ -56,7 +68,7 @@ class SandboxWorker:
             "final_answer": self.final_answer,
         }
         if self.mcp_client is not None:
-            namespace.update(self.mcp_client.create_tool_wrappers())
+            namespace.update(self.mcp_client.tools.create_tool_wrappers())
         return namespace
 
     def final_answer(self, value: str) -> None:
@@ -66,8 +78,7 @@ class SandboxWorker:
         while True:
             message = self.input_queue.get()
             if message["type"] == "stop":
-                if self.mcp_client is not None:
-                    self.mcp_client.stop()
+                self.cleanup()
                 break
             if message["type"] == "run":
                 self.handle_run(message["code"])
@@ -101,6 +112,15 @@ class SandboxWorker:
                 "success": False,
             })
 
+        except SystemExit as error:
+            self.output_queue.put({
+                "stdout": stdout_buffer.getvalue(),
+                "stderr": stderr_buffer.getvalue(),
+                "error": f"SystemExit: {error}",
+                "final_answer": self.final_answer_value,
+                "success": False,
+            })
+
         except Exception as error:
             self.output_queue.put({
                 "stdout": stdout_buffer.getvalue(),
@@ -115,6 +135,11 @@ class SandboxWorker:
             raise ImportError(f"Unauthorized import: {name}")
         return __import__(name, globals, locals, fromlist, level)
 
+    def cleanup(self) -> None:
+        if self.mcp_client is not None:
+            self.mcp_client.stop()
+            self.mcp_client = None
+
 
 def worker_entrypoint(
     input_queue: Queue,
@@ -122,14 +147,20 @@ def worker_entrypoint(
     authorized_imports: list[str],
     mcp_config: dict | None = None,
 ) -> None:
+    worker = SandboxWorker(
+        input_queue=input_queue,
+        output_queue=output_queue,
+        authorized_imports=authorized_imports,
+        mcp_config=mcp_config,
+    )
+
     try:
-        worker = SandboxWorker(
-            input_queue=input_queue,
-            output_queue=output_queue,
-            authorized_imports=authorized_imports,
-            mcp_config=mcp_config,
-        )
+        worker.start()
         worker.loop()
+
+    except KeyboardInterrupt:
+        pass
+
     except Exception as e:
         output_queue.put({
             "stdout": "",
@@ -138,3 +169,6 @@ def worker_entrypoint(
             "final_answer": None,
             "success": False,
         })
+
+    finally:
+        worker.cleanup()
