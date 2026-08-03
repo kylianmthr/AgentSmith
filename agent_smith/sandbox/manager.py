@@ -4,13 +4,18 @@ from pathlib import Path
 from typing import Any
 from pydantic import ValidationError
 
-from agent_smith.sandbox.config_validator import SandboxConfigValidator, SandboxConfigError
+from agent_smith.sandbox.config_validator import (
+    SandboxConfigValidator,
+    SandboxConfigError,
+)
 from agent_smith.models.mcp_config import SandboxMCPConfig
 from agent_smith.models.result import SandboxResult
 from agent_smith.sandbox.worker import worker_entrypoint
 
+
 class SandboxManagerError(Exception):
     pass
+
 
 class SandboxManager:
     def __init__(
@@ -28,11 +33,7 @@ class SandboxManager:
             self.output_queue = Queue()
             self.process: Process | None = None
             self.history: list[SandboxResult] = []
-        except (
-            SandboxConfigError,
-            ValidationError,
-            TypeError
-        ) as e:
+        except (SandboxConfigError, ValidationError, TypeError) as e:
             raise SandboxManagerError(e)
 
     def start(self) -> None:
@@ -49,12 +50,21 @@ class SandboxManager:
         )
         self.process.start()
 
+    def list_tools(self) -> list[str]:
+        self.start()
+        self.input_queue.put({"type": "list_tools"})
+        return self.output_queue.get(
+            timeout=self.config.max_execution_time_seconds
+        )
+
     def run(self, python_code: str) -> SandboxResult:
         self.start()
-        self.input_queue.put({
-            "type": "run",
-            "code": python_code,
-        })
+        self.input_queue.put(
+            {
+                "type": "run",
+                "code": python_code,
+            }
+        )
 
         try:
             raw_result = self.output_queue.get(
@@ -84,3 +94,4 @@ class SandboxManager:
             self.process.join()
 
         self.process = None
+
