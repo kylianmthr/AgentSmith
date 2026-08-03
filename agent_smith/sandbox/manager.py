@@ -128,4 +128,3 @@ class SandboxManager:
                 self.process.join(timeout=2)
         finally:
             self.process = None
-

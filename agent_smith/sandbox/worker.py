@@ -190,4 +190,3 @@ def worker_entrypoint(
 
     finally:
         worker.cleanup()
-
