@@ -5,7 +5,7 @@ description = "Autonomous reasoning, code generation, and execution"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-	"fastmcp>=3.4.5",
+	"fastmcp>=3.4.5,<4",
 	"mcp>=1.28.1",
 	"openai>=2.46.0",
 	"pydantic>=2.13.4",
@@ -28,10 +28,17 @@ where = ["."]
 include = ["agent_smith*", "agent_mbpp*", "agent_swebench*"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=0.24",
+]
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["integration: start a real server", "slow: try to timeout"]
+markers = [
+    "integration: start a real server",
+    "slow: try to timeout",
+]
