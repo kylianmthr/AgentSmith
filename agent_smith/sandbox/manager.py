@@ -72,6 +72,11 @@ class SandboxManager:
         except (SandboxConfigError, TypeError) as e:
             raise SandboxManagerError(e)
 
+    def list_tools(self) -> list[str]:
+        self.start()
+        self.input_queue.put({"type": "list_tools"})
+        return self.output_queue.get(timeout=self.config.max_execution_time_seconds)
+
     def start(self) -> None:
         if self.process is not None and self.process.is_alive():
             return
@@ -84,11 +89,7 @@ class SandboxManager:
                 self.mcp_config,
             ),
         )
-
-    def list_tools(self) -> list[str]:
-        self.start()
-        self.input_queue.put({"type": "list_tools"})
-        return self.output_queue.get(timeout=self.config.max_execution_time_seconds)
+        self.process.start()
 
     def run(self, python_code: str) -> SandboxResult:
         self.start()
