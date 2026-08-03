@@ -55,7 +55,7 @@ class Agent:
                 api_url=self.provider,
                 model_name=self.model_name,
                 max_tokens=self.limits,
-                api_key=dotenv.api_key,
+                api_keys=dotenv.api_key,
             )
             extractor = CodeExtractor()
             i = 0
