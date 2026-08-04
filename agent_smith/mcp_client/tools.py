@@ -17,21 +17,26 @@ class ToolsHandle:
                 properties = tool.inputSchema.get("properties", {})
                 func_def = []
                 func_def.append(f"Func {tool.name}:\n")
-                func_def.append(f"def {tool.name}(")
-                for i, (arg_name, arg_schema) in enumerate(properties.items()):
+                if tool.description:
+                    func_def.append(f"Description: {tool.description}\n")
+                args = []
+                for arg_name, arg_schema in properties.items():
                     arg_type = arg_schema.get("type", "")
-                    func_def.append(f"{arg_name}: {arg_type}")
-                    if i < len(properties) - 1:
-                        func_def.append(", ")
-                return_type = None
-                if tool.outputSchema:
-                    return_data = tool.outputSchema.get("result")
-                    if return_data:
-                        return_type = return_data.get("type")
-                if return_type:
-                    func_def.append(f") -> {return_type}:")
-                else:
-                    func_def.append("):")
+                    args.append(f"{arg_name}: {arg_type}")
+                func_def.append(f"Signature: {tool.name}({', '.join(args)})\n")
+                if properties:
+                    func_def.append("Arguments:\n")
+                    for arg_name, arg_schema in properties.items():
+                        arg_description = arg_schema.get("description", "")
+                        arg_type = arg_schema.get("type", "")
+                        if arg_description:
+                            func_def.append(
+                                f"- {arg_name} ({arg_type}): {arg_description}\n"
+                            )
+                        else:
+                            func_def.append(
+                                f"- {arg_name} ({arg_type})\n"
+                            )
                 res.append("".join(func_def))
             return res
         elif mode == "full":
