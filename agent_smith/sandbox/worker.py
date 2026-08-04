@@ -78,7 +78,7 @@ class SandboxWorker:
     def list_tools(self) -> list[str]:
         if self.mcp_client is None:
             return []
-        return self.mcp_client.tools.list_tools()
+        return self.mcp_client.tools.list_tools("prompt")
 
     def loop(self) -> None:
         while True:
