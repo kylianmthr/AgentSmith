@@ -1,3 +1,6 @@
+import argparse
+import asyncio
+from enum import Enum
 import docker
 import jedi
 import io
@@ -5,6 +8,11 @@ import os
 import tarfile
 import tempfile
 import re
+import logging
+import sys
+from fastmcp import FastMCP
+
+from agent_smith.models.task_input import SWEBenchTaskInput
 
 DOCKER_IMAGE = "swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:latest"
 CLIENT = docker.from_env()
@@ -13,6 +21,31 @@ CONTAINER = CLIENT.containers.run(
 )
 EVAL_SCRIPT = "#!/bin/bash\nset -uxo pipefail\nsource /opt/miniconda3/bin/activate\nconda activate testbed\ncd /testbed\ngit config --global --add safe.directory /testbed\ncd /testbed\ngit status\ngit show\ngit -c core.fileMode=false diff f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0\nsource /opt/miniconda3/bin/activate\nconda activate testbed\npython -m pip install -e .\ngit checkout f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0 sympy/functions/elementary/tests/test_hyperbolic.py\ngit apply -v - <<'EOF_114329324912'\ndiff --git a/sympy/functions/elementary/tests/test_hyperbolic.py b/sympy/functions/elementary/tests/test_hyperbolic.py\n--- a/sympy/functions/elementary/tests/test_hyperbolic.py\n+++ b/sympy/functions/elementary/tests/test_hyperbolic.py\n@@ -272,6 +272,8 @@ def test_coth():\n \n     assert coth(k*pi*I) == -cot(k*pi)*I\n \n+    assert coth(log(tan(2))) == coth(log(-tan(2)))\n+    assert coth(1 + I*pi/2) == tanh(1)\n \n def test_coth_series():\n     x = Symbol('x')\n\nEOF_114329324912\n: '>>>>> Start Test Output'\nPYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' bin/test -C --verbose sympy/functions/elementary/tests/test_hyperbolic.py\n: '>>>>> End Test Output'\ngit checkout f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0 sympy/functions/elementary/tests/test_hyperbolic.py\n"
 START, END = ">>>>> Start Test Output", ">>>>> End Test Output"
+
+mcp = FastMCP("swebench-tools")
+logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+logger = logging.getLogger("swebench-tools")
+
+
+def load_task_file(path: str) -> bool:
+    global DOCKER_IMAGE
+    global CLIENT
+    global CONTAINER
+    global EVAL_SCRIPT
+    try:
+        with open(path, "r") as f:
+            json_data = f.read()
+            task = SWEBenchTaskInput.model_validate_json(json_data)
+            DOCKER_IMAGE = task.docker_image
+            CLIENT = docker.from_env()
+            CONTAINER = CLIENT.containers.run(
+                DOCKER_IMAGE, command="sleep infinity", detach=True, tty=True
+            )
+            EVAL_SCRIPT = task.eval_script
+            return True
+    except Exception as e:
+        logger.error(f"ERROR: {e}")
+        return False
 
 
 def _format_line(content: str, start_line: int) -> str:
@@ -25,6 +58,7 @@ def _format_line(content: str, start_line: int) -> str:
     return new_content
 
 
+@mcp.tool()
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
     res = CONTAINER.exec_run(
         cmd=["sed", "-n", f"{start_line},{end_line}p", filepath],
@@ -41,6 +75,7 @@ def read_file(filepath: str, start_line: int, end_line: int) -> str:
     )
 
 
+@mcp.tool()
 def edit_file(filepath: str, old_str: str, new_str: str) -> None:
     res = CONTAINER.exec_run(
         cmd=["sed", "-i", f"s/{old_str}/{new_str}/g", filepath],
@@ -52,6 +87,7 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> None:
         )
 
 
+@mcp.tool()
 def list_files(directory: str, pattern: str = "*") -> str:
     res = CONTAINER.exec_run(
         cmd=["find", directory, "-name", pattern],
@@ -66,6 +102,7 @@ def list_files(directory: str, pattern: str = "*") -> str:
     return (out or b"").decode("utf-8", errors="replace")
 
 
+@mcp.tool()
 def search_code(pattern: str, file_pattern: str = "*") -> str:
     res = CONTAINER.exec_run(
         cmd=["grep", "-rnw", ".", "-e", pattern, "--include", file_pattern],
@@ -80,6 +117,7 @@ def search_code(pattern: str, file_pattern: str = "*") -> str:
     return (out or b"").decode("utf-8", errors="replace")
 
 
+@mcp.tool()
 def search_function_or_class_definition_in_code(name: str) -> str:
     res = CONTAINER.exec_run(
         cmd=["grep", "-rnw", ".", "-e", f"def {name}(", "--include", "*.py"],
@@ -121,6 +159,7 @@ def _copy_testbed_to_host(dst: str) -> str:
     return os.path.join(dst, "testbed")
 
 
+@mcp.tool()
 def find_references(name: str, filepath: str, line: int) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         root = _copy_testbed_to_host(tmp)
@@ -155,6 +194,7 @@ def find_references(name: str, filepath: str, line: int) -> str:
         return "\n".join(lines)
 
 
+@mcp.tool()
 def run_command(command: str, workdir: str = "/testbed") -> str:
     res = CONTAINER.exec_run(
         cmd=["sh", "-c", command],
@@ -165,7 +205,7 @@ def run_command(command: str, workdir: str = "/testbed") -> str:
     return f"stdout:\n{(out or b'').decode('utf-8', errors='replace')}\nstderr:\n{(err or b'').decode('utf-8', errors='replace')}\nexit_code: {res.exit_code}"
 
 
-def test_section(text: str) -> tuple[str, bool]:
+def _test_section(text: str) -> tuple[str, bool]:
     i = text.find(START)
     j = text.find(END, i + 1) if i != -1 else -1
     if i != -1 and j != -1:
@@ -178,7 +218,7 @@ _TB = re.compile(r"^Traceback \(most recent call last\):", re.M)
 _EXC = re.compile(r"^\w[\w.]*(Error|Exception|Warning|Assertion)\b")
 
 
-def summarize(output: str, budget: int = 6000, max_blocks: int = 5) -> str:
+def _summarize(output: str, budget: int = 6000, max_blocks: int = 5) -> str:
     lines = output.splitlines()
     tail = lines[-40:]
 
@@ -204,6 +244,7 @@ def summarize(output: str, budget: int = 6000, max_blocks: int = 5) -> str:
     return out if len(out) <= budget else out[:budget] + "\n[cuted (too long)]"
 
 
+@mcp.tool()
 def run_tests():
     tar_stream = io.BytesIO()
     with tarfile.open(fileobj=tar_stream, mode="w") as tar:
@@ -215,13 +256,14 @@ def run_tests():
     CONTAINER.exec_run(cmd=["chmod", "+x", "run_tests.sh"], workdir="/testbed")
     res = CONTAINER.exec_run(cmd=["./run_tests.sh"], workdir="/testbed")
     combined = (res.output or b"").decode("utf-8", errors="replace")
-    section, found = test_section(combined)
+    section, found = _test_section(combined)
     verdict = "OK" if found else f"FAIL (exit code: {res.exit_code})"
     note = "" if found else "\n[NO TEST FOUND, return raw output]"
-    body = summarize(section, budget=6000)
+    body = _summarize(section, budget=6000)
     return f"Exit code: {res.exit_code}\nVerdict: {verdict}{note}\n\n{body}"
 
 
+@mcp.tool()
 def get_patch():
     res = CONTAINER.exec_run(
         "git -c core.fileMode=false diff", demux=True, workdir="/testbed"
@@ -234,20 +276,75 @@ def get_patch():
     return (out or b"").decode("utf-8", errors="replace")
 
 
+class TransportType(str, Enum):
+    STDIO = "stdio"
+    HTTP = "http"
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="MCP server for mbpp agent")
+    parser.add_argument(
+        "--task", type=str, default=None, help="Path to the task.json file"
+    )
+    parser.add_argument(
+        "--transport",
+        type=TransportType,
+        choices=list(TransportType),
+        default=TransportType.STDIO,
+        help="The transport type of the mcp server, could be stdio or http",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Host for HTTP MCP server",
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for HTTP MCP server",
+    )
+
+    parser.add_argument(
+        "--path",
+        type=str,
+        default="/mcp",
+        help="Path for HTTP MCP server",
+    )
+    args = parser.parse_args()
+    if args.task:
+        if not load_task_file(args.task):
+            sys.exit(1)
     try:
-        print(CONTAINER.exec_run("ls -l /testbed").output.decode())
-        # print(read_file("README.md", 1, 5))
-        edit_file("README.md", "# SymPy", "test")
-        # print(read_file("README.md", 1, 5))
-        # print(list_files(".", "*.md"))
-        # print("=====")
-        # print(search_code("SymPy", "*.md"))
-        # print(read_file("isympy.py", 176, 600))
-        # print(search_function_or_class_definition_in_code("main"))
-        # print(find_references("main", "isympy.py", 176))
-        # print(run_command("mkdir test"))
-        print(get_patch())
+        if args.transport == TransportType.STDIO:
+            mcp.run(
+                transport="stdio",
+                show_banner=True,
+            )
+        else:
+            if not args.host.strip():
+                parser.error("--host cannot be empty")
+            if args.port <= 0 or args.port > 65535:
+                parser.error("--port must be between 1 and 65535")
+            if not args.path.strip():
+                parser.error("--path cannot be empty")
+            if not args.path.startswith("/"):
+                args.path = "/" + args.path
+
+            mcp.run(
+                transport="http",
+                host=args.host,
+                port=args.port,
+                path=args.path,
+                show_banner=False,
+            )
+
+    except KeyboardInterrupt:
+        pass
+    except asyncio.CancelledError:
+        pass
     finally:
         CONTAINER.stop()
         CONTAINER.remove()
