@@ -146,7 +146,7 @@ if __name__ == "__main__":
                 sandbox=manager,
                 sys_prompt=sys_prompt,
                 task=task_str,
-                task_id=task.task_id,
+                task_id=str(task.task_id),
                 limits=350,
                 benchmark_name="MBPP",
                 provider=args.provider_url,
