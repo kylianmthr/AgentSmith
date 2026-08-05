@@ -23,7 +23,7 @@ class ToolsHandle:
                 for arg_name, arg_schema in properties.items():
                     arg_type = arg_schema.get("type", "")
                     args.append(f"{arg_name}: {arg_type}")
-                func_def.append(f"Signature: {tool.name}({', '.join(args)})\n")
+                func_def.append(f"Signature: def {tool.name}({', '.join(args)}) -> str\n")
                 if properties:
                     func_def.append("Arguments:\n")
                     for arg_name, arg_schema in properties.items():
@@ -41,8 +41,7 @@ class ToolsHandle:
             return res
         elif mode == "full":
             return [tool for tool in result.tools]
-        return [tool for tool in result.tools]
-
+        raise ValueError(f"Unknown list_tools mode: {mode}")
 
     def call_tool(self, name: str, arguments: dict) -> str:
         """Call one MCP tool."""
