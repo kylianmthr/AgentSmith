@@ -3,7 +3,14 @@ from mcp import ClientSession
 from typing import Callable, Any
 from pathlib import Path
 
-PATH_ARGUMENT_NAMES = {"filepath", "path", "file_path", "directory", "cwd"}
+PATH_ARGUMENT_NAMES = {
+    "filepath",
+    "path",
+    "file_path",
+    "directory",
+    "cwd",
+    "workdir",
+}
 
 class ToolsHandle:
     def __init__(
