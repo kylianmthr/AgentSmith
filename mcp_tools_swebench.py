@@ -67,6 +67,16 @@ def _format_line(content: str, start_line: int) -> str:
 
 @mcp.tool()
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
+    """Read a file from the container and return the specified lines.
+
+    Args:
+        filepath: The path to the file inside the container.
+        start_line: The starting line number (1-based).
+        end_line: The ending line number (inclusive, 1-based).
+
+    Returns:
+        The content of the specified lines, with line numbers prefixed.
+    """
     res = CONTAINER.exec_run(
         cmd=["sed", "-n", f"{start_line},{end_line}p", filepath],
         workdir="/testbed",
@@ -84,6 +94,18 @@ def read_file(filepath: str, start_line: int, end_line: int) -> str:
 
 @mcp.tool()
 def edit_file(filepath: str, old_str: str, new_str: str) -> None:
+    """Edit a file in the container by replacing occurrences of a string.
+
+    Args:
+        old_str: The string to be replaced.
+        new_str: The string to replace with.
+
+    Returns:
+        None
+
+    Raises:
+        FileNotFoundError if the file does not exist or cannot be edited.
+    """
     res = CONTAINER.exec_run(
         cmd=["sed", "-i", f"s/{old_str}/{new_str}/g", filepath],
         workdir="/testbed",
@@ -96,6 +118,15 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> None:
 
 @mcp.tool()
 def list_files(directory: str, pattern: str = "*") -> str:
+    """List files in a directory inside the container that match a given pattern.
+
+    Args:
+        directory: The directory to search in.
+        pattern: The filename pattern to match (default is "*", which matches all files).
+
+    Returns:
+        The list of matching files, one per line.
+    """
     res = CONTAINER.exec_run(
         cmd=["find", directory, "-name", pattern],
         workdir="/testbed",
@@ -111,6 +142,15 @@ def list_files(directory: str, pattern: str = "*") -> str:
 
 @mcp.tool()
 def search_code(pattern: str, file_pattern: str = "*") -> str:
+    """Search for a pattern in code files inside the container.
+
+    Args:
+        pattern: The regex pattern to search for.
+        file_pattern: The filename pattern to include in the search (default is "*", which includes all files).
+
+    Returns:
+        The matching lines with file paths and line numbers.
+    """
     res = CONTAINER.exec_run(
         cmd=["grep", "-rnw", ".", "-e", pattern, "--include", file_pattern],
         workdir="/testbed",
@@ -126,6 +166,14 @@ def search_code(pattern: str, file_pattern: str = "*") -> str:
 
 @mcp.tool()
 def search_function_or_class_definition_in_code(name: str) -> str:
+    """Search for a function or class definition in code files inside the container.
+
+    Args:
+        name: The name of the function or class to search for.
+
+    Returns:
+        The matching lines with file paths and line numbers.
+    """
     res = CONTAINER.exec_run(
         cmd=["grep", "-rnw", ".", "-e", f"def {name}(", "--include", "*.py"],
         workdir="/testbed",
@@ -168,6 +216,16 @@ def _copy_testbed_to_host(dst: str) -> str:
 
 @mcp.tool()
 def find_references(name: str, filepath: str, line: int) -> str:
+    """Find references to a function or class in code files inside the container using Jedi.
+
+    Args:
+        name: The name of the function or class to find references for.
+        filepath: The path to the file inside the container where the function or class is defined.
+        line: The line number (1-based) in the file where the function or class is
+
+    Returns:
+        References to the function or class, with file paths and line numbers.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         root = _copy_testbed_to_host(tmp)
         if os.path.isabs(filepath):
@@ -203,6 +261,15 @@ def find_references(name: str, filepath: str, line: int) -> str:
 
 @mcp.tool()
 def run_command(command: str, workdir: str = "/testbed") -> str:
+    """Run a shell command inside the container and return its output.
+
+    Args:
+        command: The shell command to run.
+        workdir: The working directory inside the container (default is "/testbed").
+
+    Returns:
+        The standard output and standard error of the command, along with the exit code.
+    """
     res = CONTAINER.exec_run(
         cmd=["sh", "-c", command],
         workdir=workdir,
@@ -252,7 +319,12 @@ def _summarize(output: str, budget: int = 6000, max_blocks: int = 5) -> str:
 
 
 @mcp.tool()
-def run_tests():
+def run_tests() -> str:
+    """Run the evaluation script inside the container and return the results.
+
+    Returns:
+        The exit code, verdict, and summarized output of the evaluation script.
+    """
     tar_stream = io.BytesIO()
     with tarfile.open(fileobj=tar_stream, mode="w") as tar:
         tarinfo = tarfile.TarInfo(name="run_tests.sh")
