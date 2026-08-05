@@ -10,6 +10,7 @@ from agent_smith.sandbox.code_validator import (
 )
 from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
+import resource
 
 
 class SandboxWorker:
@@ -18,24 +19,30 @@ class SandboxWorker:
         input_queue: Queue,
         output_queue: Queue,
         authorized_imports: list[str],
+        allowed_directories: list[str],
+        max_memory_mb: int,
         mcp_config: dict | None = None,
     ) -> None:
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.authorized_imports = authorized_imports
+        self.allowed_directories = allowed_directories
+        self.max_memory_mb = max_memory_mb
         self.final_answer_value: str | None = None
         self.mcp_config = mcp_config
         self.mcp_client = None
         self.namespace = self.create_namespace()
 
     def start(self) -> None:
+        self.apply_memory_limit()
+
         if self.mcp_config is None:
             return
 
         self.mcp_client = SandboxMCPClient(self.mcp_config)
 
         try:
-            self.mcp_client.start()
+            self.mcp_client.start(self.allowed_directories)
         except BaseException:
             self.cleanup()
             raise
@@ -90,6 +97,10 @@ class SandboxWorker:
                 self.handle_run(message["code"])
             if message["type"] == "list_tools":
                 self.output_queue.put(self.list_tools())
+
+    def apply_memory_limit(self) -> None:
+        limit_bytes = self.max_memory_mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
 
     def handle_run(self, python_code: str) -> None:
         stdout_buffer = StringIO()
@@ -161,12 +172,16 @@ def worker_entrypoint(
     input_queue: Queue,
     output_queue: Queue,
     authorized_imports: list[str],
+    allowed_directories: list[str],
+    max_memory_mb: int,
     mcp_config: dict | None = None,
 ) -> None:
     worker = SandboxWorker(
         input_queue=input_queue,
         output_queue=output_queue,
         authorized_imports=authorized_imports,
+        allowed_directories=allowed_directories,
+        max_memory_mb=max_memory_mb,
         mcp_config=mcp_config,
     )
 

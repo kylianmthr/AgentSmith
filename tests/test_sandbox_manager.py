@@ -65,6 +65,27 @@ def test_validator_rejects_invalid_config_schema(tmp_path: Path) -> None:
         SandboxConfigValidator.load(config_path)
 
 
+@pytest.mark.parametrize(
+    "invalid_config",
+    [
+        {"allowed_directories": []},
+        {"max_execution_time_seconds": 0},
+        {"max_execution_time_seconds": 901},
+        {"max_memory_mb": 63},
+        {"max_memory_mb": 4097},
+    ],
+)
+def test_validator_rejects_invalid_limits(
+    tmp_path: Path,
+    invalid_config: dict,
+) -> None:
+    config_path = tmp_path / "invalid-limits.json"
+    config_path.write_text(json.dumps(invalid_config), encoding="utf-8")
+
+    with pytest.raises(SandboxConfigError, match="Invalid sandbox configuration"):
+        SandboxConfigValidator.load(config_path)
+
+
 def test_manager_exposes_validated_config(tmp_path: Path) -> None:
     config_path = tmp_path / "sandbox.json"
     config_path.write_text(
@@ -82,3 +103,26 @@ def test_manager_exposes_validated_config(tmp_path: Path) -> None:
     assert isinstance(manager.config, SandboxConfig)
     assert manager.config.max_execution_time_seconds == 5
     assert manager.config.max_memory_mb == 64
+
+
+def test_manager_applies_worker_memory_limit(tmp_path: Path) -> None:
+    config_path = tmp_path / "sandbox.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "max_execution_time_seconds": 2,
+                "max_memory_mb": 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = SandboxManager(config_path)
+
+    try:
+        result = manager.run("x = 'a' * (1024 * 1024 * 512)")
+    finally:
+        manager.stop()
+
+    assert result.success is False
+    assert result.error is not None

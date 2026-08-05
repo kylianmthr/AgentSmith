@@ -1,11 +1,20 @@
 from anyio.from_thread import BlockingPortal
 from mcp import ClientSession
 from typing import Callable, Any
+from pathlib import Path
+
+PATH_ARGUMENT_NAMES = {"filepath", "path", "file_path", "directory", "cwd"}
 
 class ToolsHandle:
-    def __init__(self, portal: BlockingPortal, session: ClientSession) -> None:
+    def __init__(
+            self,
+            portal: BlockingPortal,
+            session: ClientSession,
+            allowed_directories: list[str],
+        ) -> None:
         self.portal = portal
         self.session = session
+        self.allowed_directories = allowed_directories
 
     def list_tools(self, mode: str = "name") -> list[Any]:
         result = self.portal.call(self.session.list_tools)
@@ -65,6 +74,27 @@ class ToolsHandle:
             wrappers[tool.name] = self.create_single_wrapper(tool)
         return wrappers
 
+    def validate_allowed_filepath(self, filepath: str) -> None:
+        if not isinstance(filepath, str):
+            raise TypeError("filepath must be a string")
+        path = Path(filepath)
+        if not path.is_absolute():
+            raise ValueError(
+                f"filepath must be absolute: {filepath}. "
+                f"Allowed directories: {self.allowed_directories}"
+            )
+        resolved_path = path.resolve(strict=False)
+        for allowed_directory in self.allowed_directories:
+            resolved_allowed_directory = Path(allowed_directory).resolve(strict=False)
+            if resolved_path == resolved_allowed_directory:
+                return
+            if resolved_allowed_directory in resolved_path.parents:
+                return
+        raise ValueError(
+            f"filepath outside allowed directories: {filepath}. "
+            f"Allowed directories: {self.allowed_directories}"
+        )
+
     def create_single_wrapper(self, tool: Any) -> Callable:
         def wrapper(*args, **kwargs):
             properties = tool.inputSchema.get("properties", {})
@@ -81,5 +111,8 @@ class ToolsHandle:
                             f"{tool.name} has multiple values for arg {k}"
                         )
                     named_args[k] = v
+            for arg_name, arg_value in named_args.items():
+                if arg_name in PATH_ARGUMENT_NAMES:
+                    self.validate_allowed_filepath(arg_value)
             return self.call_tool(tool.name, named_args)
         return wrapper

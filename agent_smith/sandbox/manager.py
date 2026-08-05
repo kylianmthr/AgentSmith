@@ -86,6 +86,8 @@ class SandboxManager:
                 self.input_queue,
                 self.output_queue,
                 self.config.authorized_imports,
+                self.config.allowed_directories,
+                self.config.max_memory_mb,
                 self.mcp_config,
             ),
         )

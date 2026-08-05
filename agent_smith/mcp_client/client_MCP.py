@@ -28,7 +28,7 @@ class SandboxMCPClient:
         self.session_context = None
         self.session: ClientSession | None = None
 
-    def start(self) -> None:
+    def start(self, allowed_directories: list[str]) -> None:
         if self.session is not None:
             return
         try:
@@ -42,7 +42,7 @@ class SandboxMCPClient:
             self.portal.call(self.session.initialize)
             if self.portal is None or self.session is None:
                 raise RuntimeError("MCP client is not started")
-            self.tools = ToolsHandle(self.portal, self.session)
+            self.tools = ToolsHandle(self.portal, self.session, allowed_directories)
         except Exception as e:
             self.stop()
             raise SandboxMCPClientError(f"Error Setting up the MCP Client: {e}")
