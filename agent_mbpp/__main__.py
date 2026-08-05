@@ -41,7 +41,7 @@ if __name__ == "__main__":
                 "args": [
                     "mcp_tools_mbpp.py",
                     "--task",
-                    "agent_smith/sandbox/fake_task.json",
+                    args.task_file,
                 ],
                 "cwd": Path.cwd(),
                 "transport": "stdio",
