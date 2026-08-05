@@ -13,6 +13,7 @@ import sys
 from fastmcp import FastMCP
 
 from agent_smith.models.task_input import SWEBenchTaskInput
+from mcp_tools_mbpp import TASK_DEFINITION
 
 DOCKER_IMAGE = "swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:latest"
 CLIENT = docker.from_env()
@@ -21,6 +22,8 @@ CONTAINER = CLIENT.containers.run(
 )
 EVAL_SCRIPT = "#!/bin/bash\nset -uxo pipefail\nsource /opt/miniconda3/bin/activate\nconda activate testbed\ncd /testbed\ngit config --global --add safe.directory /testbed\ncd /testbed\ngit status\ngit show\ngit -c core.fileMode=false diff f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0\nsource /opt/miniconda3/bin/activate\nconda activate testbed\npython -m pip install -e .\ngit checkout f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0 sympy/functions/elementary/tests/test_hyperbolic.py\ngit apply -v - <<'EOF_114329324912'\ndiff --git a/sympy/functions/elementary/tests/test_hyperbolic.py b/sympy/functions/elementary/tests/test_hyperbolic.py\n--- a/sympy/functions/elementary/tests/test_hyperbolic.py\n+++ b/sympy/functions/elementary/tests/test_hyperbolic.py\n@@ -272,6 +272,8 @@ def test_coth():\n \n     assert coth(k*pi*I) == -cot(k*pi)*I\n \n+    assert coth(log(tan(2))) == coth(log(-tan(2)))\n+    assert coth(1 + I*pi/2) == tanh(1)\n \n def test_coth_series():\n     x = Symbol('x')\n\nEOF_114329324912\n: '>>>>> Start Test Output'\nPYTHONWARNINGS='ignore::UserWarning,ignore::SyntaxWarning' bin/test -C --verbose sympy/functions/elementary/tests/test_hyperbolic.py\n: '>>>>> End Test Output'\ngit checkout f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0 sympy/functions/elementary/tests/test_hyperbolic.py\n"
 START, END = ">>>>> Start Test Output", ">>>>> End Test Output"
+HINTS_TEXT = ""
+INSTANCE_ID = ""
 
 mcp = FastMCP("swebench-tools")
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
@@ -32,6 +35,8 @@ def load_task_file(path: str) -> bool:
     global CLIENT
     global CONTAINER
     global EVAL_SCRIPT
+    global HINTS_TEXT
+    global INSTANCE_ID
     try:
         with open(path, "r") as f:
             json_data = f.read()
@@ -42,6 +47,8 @@ def load_task_file(path: str) -> bool:
                 DOCKER_IMAGE, command="sleep infinity", detach=True, tty=True
             )
             EVAL_SCRIPT = task.eval_script
+            HINTS_TEXT = task.hints_text
+            INSTANCE_ID = task.instance_id
             return True
     except Exception as e:
         logger.error(f"ERROR: {e}")
@@ -274,6 +281,26 @@ def get_patch():
             f"git diff failed: {(err or b'').decode('utf-8', errors='replace')}"
         )
     return (out or b"").decode("utf-8", errors="replace")
+
+
+@mcp.resource("mbpp://task")
+def get_task() -> str:
+    """Get the informations of the current task."""
+    return (
+        "INSTANCE ID\n"
+        f"{INSTANCE_ID}\n"
+        "HINTS\n"
+        f"{HINTS_TEXT}\n"
+        "DOCKER IMAGE\n"
+        f"{DOCKER_IMAGE}\n"
+        "EVAL SCRIPT\n"
+        f"{EVAL_SCRIPT}"
+    )
+
+
+@mcp.prompt()
+def get_prompt() -> str:
+    return "TODO"
 
 
 class TransportType(str, Enum):
