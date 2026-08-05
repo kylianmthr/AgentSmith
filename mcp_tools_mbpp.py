@@ -146,7 +146,8 @@ def get_prompt() -> str:
         "Observation: 1/3 tests passed\n"
         "Thought: I need to see what my function returns\n"
         "Code:\n"
-        "exec(solution)\n"
+        "def repocc(string, char, new_char):\n"
+        "    return string.replace(char, new_char, 1)\n"
         "print(repocc('hello', 'l', 't'))\n"  # tu devras faire en sorte que dans le sandbox ca fonctionne
         "Observation: hetlo\n"
         "Thought: The second occurrence of 'l' was not replaced\n"
@@ -200,7 +201,6 @@ if __name__ == "__main__":
         help="Path for HTTP MCP server",
     )
 
-    
     args = parser.parse_args()
     if args.task:
         if not load_task_file(args.task):
@@ -236,3 +236,4 @@ if __name__ == "__main__":
         pass
     except asyncio.CancelledError:
         pass
+
