@@ -66,6 +66,32 @@ def test_validator_rejects_invalid_config_schema(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "authorized_imports",
+    [
+        ["socket"],
+        ["urllib"],
+        ["urllib.request"],
+        ["httpx"],
+        ["os"],
+        ["sys"],
+        ["pathlib"],
+    ],
+)
+def test_validator_rejects_imports_outside_safe_imports(
+    tmp_path: Path,
+    authorized_imports: list[str],
+) -> None:
+    config_path = tmp_path / "invalid-imports.json"
+    config_path.write_text(
+        json.dumps({"authorized_imports": authorized_imports}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SandboxConfigError, match="Invalid sandbox configuration"):
+        SandboxConfigValidator.load(config_path)
+
+
+@pytest.mark.parametrize(
     "invalid_config",
     [
         {"allowed_directories": []},

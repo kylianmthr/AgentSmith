@@ -4,6 +4,23 @@ class AstValidatorErr(Exception):
     pass
 
 class AstValidator:
+    FORBIDDEN_IMPORTS = {
+        "socket",
+        "ssl",
+        "http",
+        "urllib",
+        "requests",
+        "subprocess",
+        "os",
+        "sys",
+        "pathlib",
+        "shutil",
+        "ftplib",
+        "smtplib",
+        "telnetlib",
+        "webbrowser",
+    }
+
     def __init__(self, authorized_imports: list[str]) -> None:
         self.auth_imp = authorized_imports
         self.forbidden_func = {
@@ -63,15 +80,22 @@ class AstValidator:
         if node.attr.startswith("__"):
             raise AstValidatorErr(f"Forbidden underscore attribute access: {node.attr}")
 
-    @staticmethod
-    def is_authorized_import(module_name: str, authorized_imports: list[str]) -> bool:
+    @classmethod
+    def is_authorized_import(cls, module_name: str, authorized_imports: list[str]) -> bool:
+        if cls.is_forbidden_import(module_name):
+            return False
         for authorized in authorized_imports:
             if authorized.endswith(".*"):
                 prefix = authorized[:-2]
                 if module_name == prefix or module_name.startswith(prefix + "."):
                     return True
-
             elif module_name == authorized:
                 return True
+        return False
 
+    @classmethod
+    def is_forbidden_import(cls, module_name: str) -> bool:
+        for forbidden in cls.FORBIDDEN_IMPORTS:
+            if module_name == forbidden or module_name.startswith(forbidden + "."):
+                return True
         return False

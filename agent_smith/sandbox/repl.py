@@ -157,7 +157,7 @@ def main() -> None:
         print(e)
         return
     except KeyboardInterrupt:
-        print("CATCH")
+        print("Exiting sandbox.")
         return
     except Exception as e:
         print(e)

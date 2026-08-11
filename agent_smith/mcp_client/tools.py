@@ -66,11 +66,14 @@ class ToolsHandle:
             name,
             arguments,
         )
-        return "\n".join(
+        texts = [
             content.text
             for content in result.content
             if content.type == "text"
-        )
+        ]
+        if texts:
+            return "\n".join(texts)
+        return str(result)
 
 
     def create_tool_wrappers(self) -> dict[str, object]:

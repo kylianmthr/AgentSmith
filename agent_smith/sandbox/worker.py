@@ -176,19 +176,18 @@ def worker_entrypoint(
     max_memory_mb: int,
     mcp_config: dict | None = None,
 ) -> None:
-    worker = SandboxWorker(
-        input_queue=input_queue,
-        output_queue=output_queue,
-        authorized_imports=authorized_imports,
-        allowed_directories=allowed_directories,
-        max_memory_mb=max_memory_mb,
-        mcp_config=mcp_config,
-    )
-
+    worker = None
     try:
+        worker = SandboxWorker(
+            input_queue=input_queue,
+            output_queue=output_queue,
+            authorized_imports=authorized_imports,
+            allowed_directories=allowed_directories,
+            max_memory_mb=max_memory_mb,
+            mcp_config=mcp_config,
+        )
         worker.start()
         worker.loop()
-
     except KeyboardInterrupt:
         pass
 
@@ -202,6 +201,6 @@ def worker_entrypoint(
                 "success": False,
             }
         )
-
     finally:
-        worker.cleanup()
+        if worker is not None:
+            worker.cleanup()
