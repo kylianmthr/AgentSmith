@@ -41,7 +41,7 @@ if __name__ == "__main__":
                 "args": [
                     "mcp_tools_mbpp.py",
                     "--task",
-                    "agent_smith/sandbox/fake_task.json",
+                    args.task_file,
                 ],
                 "cwd": Path.cwd(),
                 "transport": "stdio",
@@ -146,7 +146,7 @@ if __name__ == "__main__":
                 sandbox=manager,
                 sys_prompt=sys_prompt,
                 task=task_str,
-                task_id=task.task_id,
+                task_id=str(task.task_id),
                 limits=350,
                 benchmark_name="MBPP",
                 provider=args.provider_url,

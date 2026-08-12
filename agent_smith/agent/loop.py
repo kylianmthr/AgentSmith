@@ -13,7 +13,7 @@ class Agent:
         sandbox: SandboxManager,
         sys_prompt: str,
         task: str,
-        task_id: int,
+        task_id: str,
         limits: int,
         benchmark_name: str,
         provider: str,
@@ -27,7 +27,7 @@ class Agent:
         self.provider = provider
         self.model_name = model_name
         self.result: SolutionOutput = SolutionOutput(
-            task_id=str(task_id),
+            task_id=task_id,
             benchmark=self.benchmark_name,
             success=False,
             solution="",
