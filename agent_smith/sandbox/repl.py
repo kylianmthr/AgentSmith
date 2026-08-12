@@ -51,6 +51,8 @@ class REPLInteractive:
                 self.display_result(result)
                 if result.error and result.error.startswith("Worker startup failed"):
                     break
+                if result.error and result.error.startswith("Worker startup failed"):
+                    break
                 self.buffer.clear()
                 prompt = "sandbox> "        
         except EOFError:

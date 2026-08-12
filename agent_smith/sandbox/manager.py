@@ -110,7 +110,7 @@ class SandboxManager:
         except Empty:
             self.stop(force=True)
             result = SandboxResult(
-                stderr="Sandbox execution timed out",
+                stderr=f"Sandbox execution timed out after {self.config.max_execution_time_seconds} seconds",
                 error="TimeoutError",
                 success=False,
             )

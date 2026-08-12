@@ -1,8 +1,10 @@
-# agent_smith/sandbox/worker.py
-
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from multiprocessing import Queue
+import resource
+import signal
+import os
+from typing import Any
 
 from agent_smith.sandbox.code_validator import (
     SandboxCodeValidator,
@@ -10,7 +12,6 @@ from agent_smith.sandbox.code_validator import (
 )
 from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
-import resource
 
 
 class SandboxWorker:
@@ -135,16 +136,18 @@ class SandboxWorker:
                 }
             )
 
-        except SystemExit as error:
+        except (KeyboardInterrupt, SystemExit) as error:
+            self.cleanup()
             self.output_queue.put(
                 {
                     "stdout": stdout_buffer.getvalue(),
                     "stderr": stderr_buffer.getvalue(),
-                    "error": f"SystemExit: {error}",
+                    "error": type(error).__name__,
                     "final_answer": self.final_answer_value,
                     "success": False,
                 }
             )
+            raise
 
         except Exception as error:
             self.output_queue.put(
@@ -177,6 +180,13 @@ def worker_entrypoint(
     mcp_config: dict | None = None,
 ) -> None:
     worker = None
+    def handle_sigterm(_signum: int, _frame: Any) -> None:
+        try:
+            if worker is not None:
+                worker.cleanup()
+        finally:
+            os._exit(0)
+    signal.signal(signal.SIGTERM, handle_sigterm)
     try:
         worker = SandboxWorker(
             input_queue=input_queue,
@@ -188,9 +198,9 @@ def worker_entrypoint(
         )
         worker.start()
         worker.loop()
-    except KeyboardInterrupt:
-        pass
 
+    except (KeyboardInterrupt, SystemExit):
+        pass
     except Exception as e:
         output_queue.put(
             {
