@@ -13,6 +13,8 @@ from agent_smith.sandbox.code_validator import (
 from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
 
+class SandboxExecutionTimeout(Exception):
+    pass
 
 class SandboxWorker:
     def __init__(
@@ -35,20 +37,12 @@ class SandboxWorker:
         self.namespace = self.create_namespace()
 
     def start(self) -> None:
-        self.apply_memory_limit()
-
-        if self.mcp_config is None:
-            return
-
-        self.mcp_client = SandboxMCPClient(self.mcp_config)
-
-        try:
+        if self.mcp_config is not None:
+            self.mcp_client = SandboxMCPClient(self.mcp_config)
             self.mcp_client.start(self.allowed_directories)
-        except BaseException:
-            self.cleanup()
-            raise
-
-        self.namespace = self.create_namespace()
+            self.namespace = self.create_namespace()
+        self.output_queue.put({"type": "ready"})
+        self.apply_memory_limit()
 
     def create_namespace(self) -> dict:
         allowed_builtins = {

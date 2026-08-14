@@ -31,6 +31,7 @@ class REPLInteractive:
     def run(self):
         prompt = "sandbox> "
         try:
+            self.sandbox.start()
             while 1:
                 line = input(prompt)
                 if line == "exit":
