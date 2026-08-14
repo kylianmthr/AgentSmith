@@ -13,8 +13,11 @@ from agent_smith.sandbox.code_validator import (
 from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
 
-class SandboxExecutionTimeout(Exception):
+class SandboxExecutionTimeout(BaseException):
     pass
+
+def _timeout_handler(_signum, _frame):
+    raise SandboxExecutionTimeout()
 
 class SandboxWorker:
     def __init__(
@@ -24,6 +27,7 @@ class SandboxWorker:
         authorized_imports: list[str],
         allowed_directories: list[str],
         max_memory_mb: int,
+        max_execution_time_seconds: int,
         mcp_config: dict | None = None,
     ) -> None:
         self.input_queue = input_queue
@@ -31,6 +35,7 @@ class SandboxWorker:
         self.authorized_imports = authorized_imports
         self.allowed_directories = allowed_directories
         self.max_memory_mb = max_memory_mb
+        self.max_execution_time_seconds = max_execution_time_seconds
         self.final_answer_value: str | None = None
         self.mcp_config = mcp_config
         self.mcp_client = None
@@ -41,8 +46,8 @@ class SandboxWorker:
             self.mcp_client = SandboxMCPClient(self.mcp_config)
             self.mcp_client.start(self.allowed_directories)
             self.namespace = self.create_namespace()
-        self.output_queue.put({"type": "ready"})
         self.apply_memory_limit()
+        self.output_queue.put({"type": "ready"})
 
     def create_namespace(self) -> dict:
         allowed_builtins = {
@@ -71,8 +76,22 @@ class SandboxWorker:
             "final_answer": self.final_answer,
         }
         if self.mcp_client is not None:
-            namespace.update(self.mcp_client.tools.create_tool_wrappers())
+            wrappers = self.mcp_client.tools.create_tool_wrappers()
+            namespace.update({
+                name: self.pause_timeout_around(wrapper)
+                for name, wrapper in wrappers.items()
+            })
         return namespace
+
+    def pause_timeout_around(self, func):
+        def wrapped(*args, **kwargs):
+            remaining = signal.setitimer(signal.ITIMER_REAL, 0)[0]
+            try:
+                return func(*args, **kwargs)
+            finally:
+                if remaining > 0:
+                    signal.setitimer(signal.ITIMER_REAL, remaining)
+        return wrapped
 
     def final_answer(self, value: str) -> None:
         self.final_answer_value = value
@@ -97,6 +116,22 @@ class SandboxWorker:
         limit_bytes = self.max_memory_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
 
+    def exec_with_timeout(
+        self,
+        python_code: str,
+        ) -> None:
+        previous_handler = signal.getsignal(signal.SIGALRM)
+
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.setitimer(signal.ITIMER_REAL, self.max_execution_time_seconds)
+        try:
+            exec(python_code, self.namespace, self.namespace)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous_handler)
+
+
+
     def handle_run(self, python_code: str) -> None:
         stdout_buffer = StringIO()
         stderr_buffer = StringIO()
@@ -107,7 +142,7 @@ class SandboxWorker:
                 self.authorized_imports,
             )
             with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
-                exec(python_code, self.namespace, self.namespace)
+                self.exec_with_timeout(python_code)
 
             self.output_queue.put(
                 {
@@ -118,6 +153,15 @@ class SandboxWorker:
                     "success": True,
                 }
             )
+
+        except SandboxExecutionTimeout:
+            self.output_queue.put({
+                "stdout": stdout_buffer.getvalue(),
+                "stderr": stderr_buffer.getvalue() + "\nSandbox execution timed out...",
+                "error": "TimeoutError",
+                "final_answer": self.final_answer_value,
+                "success": False,
+            })
 
         except SandboxCodeValidatorErr as error:
             self.output_queue.put(
@@ -171,6 +215,7 @@ def worker_entrypoint(
     authorized_imports: list[str],
     allowed_directories: list[str],
     max_memory_mb: int,
+    max_execution_time_seconds: int,
     mcp_config: dict | None = None,
 ) -> None:
     worker = None
@@ -188,6 +233,7 @@ def worker_entrypoint(
             authorized_imports=authorized_imports,
             allowed_directories=allowed_directories,
             max_memory_mb=max_memory_mb,
+            max_execution_time_seconds=max_execution_time_seconds,
             mcp_config=mcp_config,
         )
         worker.start()

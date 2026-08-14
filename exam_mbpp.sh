@@ -26,6 +26,10 @@ MOULINETTE_DIR="$ROOT/moulinette"
 CACHE_DIR="$ROOT/cache"
 LOG_DIR="$CACHE_DIR/logs"
 
+# uv peut heriter d'un cache global non ecrivable sur les postes 42.
+: "${UV_CACHE_DIR:=/tmp/uv-cache}"
+export UV_CACHE_DIR
+
 # chemins relatifs à la racine (pour l'agent)
 TASK_FILE_REL="cache/mbpp_task.json"
 SOLUTION_FILE_REL="cache/mbpp_solution.json"

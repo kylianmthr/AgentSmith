@@ -89,6 +89,7 @@ class SandboxManager:
                 self.config.authorized_imports,
                 self.config.allowed_directories,
                 self.config.max_memory_mb,
+                self.config.max_execution_time_seconds,
                 self.mcp_config,
             ),
         )
@@ -117,7 +118,7 @@ class SandboxManager:
         )
         try:
             raw_result = self.output_queue.get(
-                timeout=self.config.max_execution_time_seconds,
+                timeout=self.config.max_execution_time_seconds + 300,
             )
             result = SandboxResult(**raw_result)
         except Empty:

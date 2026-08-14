@@ -59,6 +59,9 @@ class AstValidator:
             elif isinstance(node, ast.Attribute):
                 self.validate_attribute(node)
 
+            elif isinstance(node, ast.ExceptHandler):
+                self.validate_except_handler(node)
+
     def validate_import(self, node: ast.Import) -> None:
         for alias in node.names:
             module_name = alias.name
@@ -79,6 +82,10 @@ class AstValidator:
     def validate_attribute(self, node: ast.Attribute) -> None:
         if node.attr.startswith("__"):
             raise AstValidatorErr(f"Forbidden underscore attribute access: {node.attr}")
+
+    def validate_except_handler(self, node: ast.ExceptHandler) -> None:
+        if node.type is None:
+            raise AstValidatorErr("Forbidden empty except")
 
     @classmethod
     def is_authorized_import(cls, module_name: str, authorized_imports: list[str]) -> bool:
