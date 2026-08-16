@@ -21,6 +21,24 @@ class AstValidator:
         "webbrowser",
     }
 
+    FORBIDDEN_ATTRIBUTES = {
+        "sys",
+        "modules",
+        "builtins",
+        "os",
+        "subprocess",
+        "socket",
+        "pathlib",
+        "shutil",
+        "open",
+        "popen",
+        "system",
+        "attrgetter",
+        "methodcaller",
+        "Formatter",
+        "get_field",
+    }
+
     def __init__(self, authorized_imports: list[str]) -> None:
         self.auth_imp = authorized_imports
         self.forbidden_func = {
@@ -72,6 +90,9 @@ class AstValidator:
         module_name = node.module or ""
         if not self.is_authorized_import(module_name, self.auth_imp):
             raise AstValidatorErr(f"Unauthorized import: {module_name}")
+        for importfrom in node.names:
+            if (importfrom.name.startswith("_") or importfrom.name in self.FORBIDDEN_ATTRIBUTES):
+                raise AstValidatorErr(f"Forbidden imported attribute: {importfrom.name}")
 
     def validate_call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name):
@@ -80,8 +101,8 @@ class AstValidator:
                 raise AstValidatorErr(f"Forbidden function call: {function_name}")
 
     def validate_attribute(self, node: ast.Attribute) -> None:
-        if node.attr.startswith("__"):
-            raise AstValidatorErr(f"Forbidden underscore attribute access: {node.attr}")
+        if (node.attr.startswith("_") or node.attr in self.FORBIDDEN_ATTRIBUTES):
+            raise AstValidatorErr(f"Forbidden attribute access: {node.attr}")
 
     def validate_except_handler(self, node: ast.ExceptHandler) -> None:
         if node.type is None:
