@@ -48,6 +48,7 @@ class Agent:
         dotenv = DotEnvLoader()
         dotenv.load()
         start_time = time.time()
+        max_retries = 10 if self.benchmark_name == "MBPP" else 30
         try:
             if not dotenv.api_key:
                 raise ValueError("API Key not defined.")
@@ -59,7 +60,7 @@ class Agent:
             )
             extractor = CodeExtractor()
             i = 0
-            while i < 10:
+            while i < max_retries:
                 self.result.iterations += 1
                 res = client.generate(conversation=history)
                 self.result.total_requests += 1
