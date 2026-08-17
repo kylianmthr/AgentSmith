@@ -32,6 +32,12 @@ class REPLInteractive:
         prompt = "sandbox> "
         try:
             self.sandbox.start()
+            if not sys.stdin.isatty():
+                python_code = sys.stdin.read()
+                if python_code.strip():
+                    result = self.sandbox.run(python_code)
+                    self.display_result(result)
+                return
             while 1:
                 line = input(prompt)
                 if line == "exit":
