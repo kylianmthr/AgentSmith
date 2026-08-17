@@ -54,6 +54,25 @@ def test_validate_rejects_unauthorized_imports(python_code: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "python_code, authorized_imports",
+    [
+        ("import socket", ["socket"]),
+        ("import urllib.request", ["urllib.*"]),
+        ("import http.server", ["http.*"]),
+        ("import os.path", ["os.*"]),
+        ("import pathlib", ["pathlib"]),
+        ("import sys", ["sys"]),
+    ],
+)
+def test_validate_rejects_forbidden_imports_even_when_authorized(
+    python_code: str,
+    authorized_imports: list[str],
+) -> None:
+    with pytest.raises(SandboxCodeValidatorErr, match="Unauthorized import"):
+        SandboxCodeValidator.validate(python_code, authorized_imports)
+
+
+@pytest.mark.parametrize(
     "python_code",
     [
         "eval('1 + 1')",

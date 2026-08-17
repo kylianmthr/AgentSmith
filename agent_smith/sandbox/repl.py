@@ -31,6 +31,7 @@ class REPLInteractive:
     def run(self):
         prompt = "sandbox> "
         try:
+            self.sandbox.start()
             while 1:
                 line = input(prompt)
                 if line == "exit":
@@ -157,7 +158,7 @@ def main() -> None:
         print(e)
         return
     except KeyboardInterrupt:
-        print("CATCH")
+        print("Exiting sandbox.")
         return
     except Exception as e:
         print(e)
