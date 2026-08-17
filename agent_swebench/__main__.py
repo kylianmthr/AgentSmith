@@ -64,8 +64,17 @@ if __name__ == "__main__":
                 "7. If your code passed all tests, submit your solution with final_answer(solution), solution must be the git patch of your modification. You can retrieve it with your given tools\n"
                 "You always must test your code with the tools that you can use.\n"
                 "Any other function than the present one in tools section are strictly forbidden\n"
+                "OBSERVATIONS\n"
+                "The observation you receive is the stdout of your code block, nothing else.\n"
+                "A tool call whose return value is not printed produces NO observation.\n"
+                "Therefore every tool call must be wrapped in print(). The only exception is\n"
+                "final_answer(), which terminates the run.\n"
+                "    print(edit_file(...))    correct\n"
+                "    edit_file(...)           wrong: you will see an empty observation\n"
+                "If an observation is empty, the cause is your own code, not a broken tool or a\n"
+                "missing file. Re-issue the same call wrapped in print() before forming any other\n"
+                "hypothesis.\n"
                 "TOOLS\n"
-                "This functions return values, if you want to be able to see it you probably need to use print() function\n"
                 f"{parsed_tools}\n"
                 "final_answer(code) to submit your code if it's valid\n"
                 "EXAMPLE\n"
@@ -73,16 +82,14 @@ if __name__ == "__main__":
                 "Thought: The issue says `Mul.flatten` mishandles zero coefficients.\n"
                 "I locate the definition before reading its context.\n"
                 "```python\n"
-                'loc = search_function_or_class_definition_in_code(name="flatten")\n'
-                "print(loc)\n"
+                'print(search_function_or_class_definition_in_code(name="flatten"))\n'
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
                 "/testbed/sympy/core/mul.py:120 def flatten(cls, seq):\n"
                 "[ASSISTANT]\n"
                 "Thought: I read the relevant range to understand the current logic.\n"
                 "```python\n"
-                'src = read_file(filepath="/testbed/sympy/core/mul.py", start_line=120, end_line=160)\n'
-                "print(src)\n"
+                'print(read_file(filepath="/testbed/sympy/core/mul.py", start_line=120, end_line=160))\n'
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
                 "121: def flatten(cls, seq):\n"
@@ -95,15 +102,15 @@ if __name__ == "__main__":
                 "Thought: The coeff==0 branch returns too early and drops the non-commutative factors.\n"
                 "I fix it, then run the tests in the same turn.\n"
                 "```python\n"
-                "edit_file(\n"
+                "print(edit_file(\n"
                 '    filepath="/testbed/sympy/core/mul.py",\n'
                 '    old_str="    if coeff is S.Zero:\\n        return [coeff], [], None",\n'
                 '    new_str="    if coeff is S.Zero:\\n        return [coeff], nc_part, None",\n'
-                ")\n"
-                "result = run_tests()\n"
-                "print(result)\n"
+                "))\n"
+                "print(run_tests())\n"
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
+                "edit_file: 1 occurrence replaced\n"
                 "... 42 passed, 0 failed ...\n"
                 "[ASSISTANT]\n"
                 "Thought: All tests pass. I submit the patch.\n"
@@ -115,10 +122,8 @@ if __name__ == "__main__":
                 "Thought: I don't know the parsing module layout yet. I list the files, then search\n"
                 "for the error string mentioned in the issue.\n"
                 "```python\n"
-                'files = list_files(directory="/testbed/sympy/parsing", pattern="*.py")\n'
-                "print(files)\n"
-                'hits = search_code(pattern="unexpected token", file_pattern="*.py")\n'
-                "print(hits)\n"
+                'print(list_files(directory="/testbed/sympy/parsing", pattern="*.py"))\n'
+                'print(search_code(pattern="unexpected token", file_pattern="*.py"))\n'
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
                 "/testbed/sympy/parsing/sympy_parser.py\n"
@@ -128,8 +133,7 @@ if __name__ == "__main__":
                 "Thought: Before touching the function that raises the error, I check who calls it\n"
                 "to gauge the blast radius of a signature change.\n"
                 "```python\n"
-                'refs = find_references(name="eval_expr", filepath="/testbed/sympy/parsing/sympy_parser.py", line=498)\n'
-                "print(refs)\n"
+                'print(find_references(name="eval_expr", filepath="/testbed/sympy/parsing/sympy_parser.py", line=498))\n'
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
                 "/testbed/sympy/parsing/sympy_parser.py:1043     return eval_expr(code, local_dict, global_dict)\n"
@@ -137,14 +141,15 @@ if __name__ == "__main__":
                 "[ASSISTANT]\n"
                 "Thought: Only one internal caller, so adding an optional parameter is safe. I edit and test.\n"
                 "```python\n"
-                "edit_file(\n"
+                "print(edit_file(\n"
                 '    filepath="/testbed/sympy/parsing/sympy_parser.py",\n'
                 '    old_str="def eval_expr(code, local_dict, global_dict):",\n'
                 '    new_str="def eval_expr(code, local_dict, global_dict, strict=False):",\n'
-                ")\n"
+                "))\n"
                 "print(run_tests())\n"
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
+                "edit_file: 1 occurrence replaced\n"
                 "... 15 passed, 0 failed ...\n"
                 "[ASSISTANT]\n"
                 "```python\n"
@@ -154,22 +159,22 @@ if __name__ == "__main__":
                 "[ASSISTANT]\n"
                 "Thought: The issue reports a TypeError in `concat`. I fix what looks like the cause and test.\n"
                 "```python\n"
-                "edit_file(\n"
+                "print(edit_file(\n"
                 '    filepath="/testbed/xarray/core/concat.py",\n'
                 '    old_str="dims = set(v.dims)",\n'
                 '    new_str="dims = list(v.dims)",\n'
-                ")\n"
+                "))\n"
                 "print(run_tests())\n"
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
+                "edit_file: 1 occurrence replaced\n"
                 "... 3 passed, 2 failed ...\n"
                 "FAILED test_concat.py::test_concat_dim_order - AssertionError: order not preserved\n"
                 "[ASSISTANT]\n"
                 "Thought: My change doesn't address the root cause: the problem is dim ordering, not type.\n"
                 "I re-read the full function to form a better hypothesis before editing again.\n"
                 "```python\n"
-                'src = read_file(filepath="/testbed/xarray/core/concat.py", start_line=200, end_line=240)\n'
-                "print(src)\n"
+                'print(read_file(filepath="/testbed/xarray/core/concat.py", start_line=200, end_line=240))\n'
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
                 "200: def _calc_concat_dim(...):\n"
@@ -181,14 +186,15 @@ if __name__ == "__main__":
                 "Thought: Line 222 sorts the dimensions and destroys their order. That is the real cause.\n"
                 "I replace the sort with order-preserving dedup, then re-test.\n"
                 "```python\n"
-                "edit_file(\n"
+                "print(edit_file(\n"
                 '    filepath="/testbed/xarray/core/concat.py",\n'
                 '    old_str="    dims = sorted(dims)",\n'
                 '    new_str="    dims = list(dict.fromkeys(dims))",\n'
-                ")\n"
+                "))\n"
                 "print(run_tests())\n"
                 "```<end_code>\n"
                 "[OBSERVATION]\n"
+                "edit_file: 1 occurrence replaced\n"
                 "... 5 passed, 0 failed ...\n"
                 "[ASSISTANT]\n"
                 "```python\n"
@@ -198,9 +204,11 @@ if __name__ == "__main__":
                 "- Budget is tight (30 iterations max, small token budget). Aim to finish in minimal steps.\n"
                 "- Solution must be self-contained: include the imports it needs, no test code, no input().\n"
                 "- Do not re-explain the problem or restate code you already wrote.\n"
+                "- Do not switch to run_command to work around a tool that seems to fail. Fix the call.\n"
                 "You need to terminate your responses by <end_code>\n"
                 "You need to provide one python code block at a time, and you need to wait for the observation before providing the next code block.\n"
                 "If all of your tests pass, you must submit your solution with final_answer\n"
+                "To use the tools, you need to call them with python code block\n"
             )
             agent = Agent(
                 sandbox=manager,

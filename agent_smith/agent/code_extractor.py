@@ -28,7 +28,7 @@ class CodeExtractor:
                 return res
             except ValueError:
                 i += 1
-        raise ValueError("No code block was found")
+        return llm_output
 
 
 class Extractor(ABC):
@@ -61,7 +61,8 @@ class XMLExtractor(Extractor):
         r'<invoke name="(?P<name>[^"]+)">(?P<content>.*?)</invoke>', re.DOTALL
     )
     PARAM_RE = re.compile(
-        r'<parameter name="(?P<name>[^"]+)">(?P<value>.*?)</parameter>', re.DOTALL
+        r'<parameter name="(?P<name>[^"]+)">(?P<value>.*?)</parameter>',
+        re.DOTALL,
     )
 
     def extract(self, prompt: str) -> str:
@@ -104,7 +105,9 @@ class HermesExctractor(Extractor):
 
 class ReActExtractor(Extractor):
     def extract(self, prompt: str) -> str:
-        pattern = r"Action:\s*(?P<name>\S+)(?:\s*Action Input:\s*(?P<input>.*))?"
+        pattern = (
+            r"Action:\s*(?P<name>\S+)(?:\s*Action Input:\s*(?P<input>.*))?"
+        )
         match = re.search(pattern, prompt, re.DOTALL)
         if not match:
             raise ValueError("No ReAct code block was found")
@@ -114,7 +117,9 @@ class ReActExtractor(Extractor):
             return f"result = {func_name}()"
         try:
             parameters_json = JSONExtractor().extract(raw_input.strip())
-            parameters = [f"{key}={value!r}" for key, value in parameters_json.items()]
+            parameters = [
+                f"{key}={value!r}" for key, value in parameters_json.items()
+            ]
             return f"result = {func_name}({', '.join(parameters)})"
         except Exception:
             return f"result = {func_name}({raw_input!r})"

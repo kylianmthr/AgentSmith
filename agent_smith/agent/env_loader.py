@@ -11,3 +11,4 @@ class DotEnvLoader:
         api_key = os.getenv("API_KEY")
         if api_key:
             self.api_key = api_key.split(",")
+            print(self.api_key)
