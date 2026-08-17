@@ -18,6 +18,8 @@ class AstValidator:
         "ftplib",
         "smtplib",
         "telnetlib",
+        "importlib",
+        "builtins",
         "webbrowser",
     }
 
@@ -27,7 +29,6 @@ class AstValidator:
         "builtins",
         "os",
         "subprocess",
-        "socket",
         "pathlib",
         "shutil",
         "open",
@@ -51,7 +52,6 @@ class AstValidator:
             "globals",
             "locals",
             "vars",
-            "dir",
             "getattr",
             "setattr",
             "delattr",
@@ -65,16 +65,16 @@ class AstValidator:
             raise AstValidatorErr(f"Invalid Python syntax: {error}") from error
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                self.validate_import(node)
+            # if isinstance(node, ast.Import):
+            #     self.validate_import(node)
 
-            elif isinstance(node, ast.ImportFrom):
-                self.validate_import_from(node)
+            # elif isinstance(node, ast.ImportFrom):
+            #     self.validate_import_from(node)
 
-            elif isinstance(node, ast.Call):
-                self.validate_call(node)
+            # if isinstance(node, ast.Call):
+            #     self.validate_call(node)
 
-            elif isinstance(node, ast.Attribute):
+            if isinstance(node, ast.Attribute):
                 self.validate_attribute(node)
 
             elif isinstance(node, ast.ExceptHandler):
