@@ -1,6 +1,7 @@
 from typing import Any
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from anyio.from_thread import BlockingPortal
+import os
 
 
 class StdioHandle:
@@ -14,6 +15,7 @@ class StdioHandle:
             command=self.config["command"],
             args=self.config.get("args", []),
             cwd=self.config.get("cwd"),
+            env=os.environ.copy()
         )
         self.stdio_context = self.portal.wrap_async_context_manager(
             stdio_client(server)
