@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 from agent_smith.agent.loop import Agent
@@ -15,14 +16,22 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output-file",
+        "--output",
+        dest="output_file",
         type=str,
         default="cache/mbpp_solution.json",
         help="Path to the output file",
     )
     parser.add_argument(
+        "--sandbox-config",
+        type=str,
+        default=None,
+        help="Optional path to a sandbox configuration file",
+    )
+    parser.add_argument(
         "--model-name",
         type=str,
-        default="llama-3.1-8b-instant",
+        default="openai/gpt-oss-120b",
         help="Name of the model to use",
     )
     parser.add_argument(
@@ -33,21 +42,25 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     try:
-        with open(args.task_file, "r") as f:
+        task_path = Path(args.task_file)
+        sandbox_config_path = (
+            Path(args.sandbox_config) if args.sandbox_config else None
+        )
+        with open(task_path, "r") as f:
             json_data = f.read()
             task = MBPPTaskInput.model_validate_json(json_data)
             mcp_config = {
-                "command": "python3",
+                "command": sys.executable,
                 "args": [
                     "mcp_tools_mbpp.py",
                     "--task",
-                    "agent_smith/sandbox/fake_task.json",
+                    str(task_path),
                 ],
-                "cwd": Path.cwd(),
+                "cwd": str(Path.cwd()),
                 "transport": "stdio",
             }
             manager = SandboxManager(
-                Path(args.task_file), mcp_config=mcp_config
+                sandbox_config_path, mcp_config=mcp_config
             )
             tools = manager.list_tools()
             parsed_tools = "\n".join(tools)
@@ -146,7 +159,7 @@ if __name__ == "__main__":
                 sandbox=manager,
                 sys_prompt=sys_prompt,
                 task=task_str,
-                task_id=task.task_id,
+                task_id=str(task.task_id),
                 limits=350,
                 benchmark_name="MBPP",
                 provider=args.provider_url,

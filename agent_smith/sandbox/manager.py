@@ -59,6 +59,7 @@ class SandboxManager:
         config_path: Path | None,
         mcp_config: dict[str, Any] | None = None,
     ) -> None:
+        self.start_timeout = 120
         try:
             self.config = SandboxConfigValidator.load(config_path)
             if mcp_config is None:
@@ -86,10 +87,26 @@ class SandboxManager:
                 self.input_queue,
                 self.output_queue,
                 self.config.authorized_imports,
+                self.config.allowed_directories,
+                self.config.max_memory_mb,
+                self.config.max_execution_time_seconds,
                 self.mcp_config,
             ),
         )
         self.process.start()
+        try:
+            message = self.output_queue.get(timeout=self.start_timeout)
+        except Empty as error:
+            self.stop(force=True)
+            raise SandboxManagerError(
+                "Sandbox worker startup timed out"
+            ) from error
+
+        if message.get("type") != "ready":
+            self.stop(force=True)
+            raise SandboxManagerError(
+                message.get("error", "Sandbox worker startup failed")
+            )
 
     def run(self, python_code: str) -> SandboxResult:
         self.start()
@@ -99,16 +116,15 @@ class SandboxManager:
                 "code": python_code,
             }
         )
-
         try:
             raw_result = self.output_queue.get(
-                timeout=self.config.max_execution_time_seconds,
+                timeout=self.config.max_execution_time_seconds + 300,
             )
             result = SandboxResult(**raw_result)
         except Empty:
             self.stop(force=True)
             result = SandboxResult(
-                stderr="Sandbox execution timed out",
+                stderr=f"Sandbox execution timed out after {self.config.max_execution_time_seconds} seconds",
                 error="TimeoutError",
                 success=False,
             )

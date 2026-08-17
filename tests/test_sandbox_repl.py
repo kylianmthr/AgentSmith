@@ -16,7 +16,11 @@ from agent_smith.sandbox.repl import (
 class FakeSandbox:
     def __init__(self) -> None:
         self.runs: list[str] = []
+        self.started = False
         self.stopped = False
+
+    def start(self) -> None:
+        self.started = True
 
     def run(self, python_code: str) -> SandboxResult:
         self.runs.append(python_code)
