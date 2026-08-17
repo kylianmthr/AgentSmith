@@ -63,7 +63,7 @@ class SandboxWorker:
             "list": list,
             "dict": dict,
             "bytearray": bytearray,
-            "byte": bytes,
+            "bytes": bytes,
             "set": set,
             "tuple": tuple,
             "enumerate": enumerate,

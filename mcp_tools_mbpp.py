@@ -3,6 +3,7 @@ import subprocess
 import sys
 import argparse
 import logging
+import json
 from fastmcp import FastMCP
 import asyncio
 
@@ -49,7 +50,7 @@ def last_line(stderr: str) -> str:
 
 
 @mcp.tool()
-def run_tests(code: str) -> str:
+def run_tests(code: str, test_list: list[str] | None = None) -> str:
     """Execute the MBPP test suite against a candidate solution.
 
     Args:
@@ -58,10 +59,11 @@ def run_tests(code: str) -> str:
     Returns:
         A summary like "2/3 tests passed" followed by details of failing assertions.
     """
-    if not len(TEST_LIST):
-        return "ERROR: No tasks loaded"
+    tests = test_list if test_list is not None else TEST_LIST
+    if not tests:
+        return "ERROR: No tests provided"
     failures = []
-    for test in TEST_LIST:
+    for test in tests:
         test_code = "\n".join(TEST_IMPORT) + "\n" + code + "\n" + test
         try:
             res = subprocess.run(
@@ -83,13 +85,15 @@ def run_tests(code: str) -> str:
             failures.append(f"TIMEOUT: {test} (10s)")
         except Exception as e:
             failures.append(f"CRASH: {e}")
-    res = f"{len(TEST_LIST) - len(failures)}/{len(TEST_LIST)} tests passed"
+    res = f"{len(tests) - len(failures)}/{len(tests)} tests passed"
     if failures:
         res += "\n" + "\n".join(
             failures[:3]
         )  # on a que 600 tokens/iteration donc on limite les logs de failures
         if len(failures) > 3:
             res += f"\n{len(failures) - 3} additional failures not displayed"
+    if test_list is not None:
+        return json.dumps({"success": not failures, "output": res})
     return res
 
 
