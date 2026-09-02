@@ -12,6 +12,18 @@ class JSONMalformed(ValueError):
         self.message = message
 
 
+def as_call(func_name: str, parameters: list[str]) -> str:
+    """Render a tool call as sandbox code.
+
+    Everything but final_answer is wrapped in print(), otherwise the call
+    produces no stdout and the model gets an empty observation.
+    """
+    call = f"{func_name}({', '.join(parameters)})"
+    if func_name == "final_answer":
+        return call
+    return f"print({call})"
+
+
 @dataclass
 class ExtractedCode:
     """What the loop should run, plus what the model must be told about it.
@@ -52,6 +64,7 @@ class CodeExtractor:
     def __init__(self) -> None:
         self.extractors: list[Extractor] = [
             PythonExtractor(),
+            FunctionTagExtractor(),
             XMLExtractor(),
             HermesExctractor(),
             ReActExtractor(),
@@ -130,7 +143,7 @@ class XMLExtractor(Extractor):
             f"{p.group('name')}={self.transform(p.group('value'))!r}"  # !r = repr
             for p in self.PARAM_RE.finditer(match.group("content"))
         ]
-        return f"result = {func_name}({', '.join(parameters)})"
+        return as_call(func_name, parameters)
 
 
 class JSONExtractor:
@@ -155,7 +168,7 @@ class HermesExctractor(Extractor):
         func_name = call["name"]
         arguments = call.get("arguments", {})
         parameters = [f"{key}={value!r}" for key, value in arguments.items()]
-        return f"result = {func_name}({', '.join(parameters)})"
+        return as_call(func_name, parameters)
 
 
 class ReActExtractor(Extractor):
@@ -169,15 +182,15 @@ class ReActExtractor(Extractor):
         func_name = match.group("name")
         raw_input = match.group("input")
         if not raw_input or not raw_input.strip():
-            return f"result = {func_name}()"
+            return as_call(func_name, [])
         try:
             parameters_json = JSONExtractor().extract(raw_input.strip())
             parameters = [
                 f"{key}={value!r}" for key, value in parameters_json.items()
             ]
-            return f"result = {func_name}({', '.join(parameters)})"
+            return as_call(func_name, parameters)
         except Exception:
-            return f"result = {func_name}({raw_input!r})"
+            return as_call(func_name, [repr(raw_input)])
 
 
 class TruncatedPythonExtractor(Extractor):
@@ -209,3 +222,45 @@ class BareCodeExtractor(Extractor):
         if not any(isinstance(node, ast.Call) for node in ast.walk(tree)):
             raise ValueError("Bare code calls nothing, it is prose")
         return code
+
+
+class FunctionTagExtractor(Extractor):
+    """Qwen-style calls: <function=name><parameter=key>value</parameter></function>.
+
+    Neither XMLExtractor (<invoke name="...">) nor HermesExctractor
+    (<tool_call>{json}</tool_call>) matches this dialect, which Qwen emits by
+    default instead of a fenced code block.
+    """
+
+    FUNCTION_RE = re.compile(
+        r"<function=(?P<name>[^>\s]+)\s*>(?P<content>.*?)</function>", re.DOTALL
+    )
+    PARAM_RE = re.compile(
+        r"<parameter=(?P<name>[^>\s]+)\s*>(?P<value>.*?)</parameter>", re.DOTALL
+    )
+
+    def extract(self, prompt: str) -> str:
+        match = self.FUNCTION_RE.search(prompt)
+        if not match:
+            raise ValueError("No <function=...> tool call was found")
+        parameters = [
+            f"{p.group('name')}={self.value_of(p.group('value'))!r}"
+            for p in self.PARAM_RE.finditer(match.group("content"))
+        ]
+        return as_call(match.group("name"), parameters)
+
+    def value_of(self, raw: str):
+        """Keep indentation: only the framing newlines are removed.
+
+        edit_file's old_str is indentation-sensitive, so a plain strip() would
+        silently break every multi-line edit.
+        """
+        value = html.unescape(raw)
+        if value.startswith("\n"):
+            value = value[1:]
+        if value.endswith("\n"):
+            value = value[:-1]
+        try:
+            return ast.literal_eval(value.strip())
+        except (ValueError, SyntaxError):
+            return value

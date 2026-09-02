@@ -6,6 +6,10 @@ from agent_smith.agent.loop import Agent
 from agent_smith.models.task_input import MBPPTaskInput
 from agent_smith.sandbox.manager import SandboxManager
 
+# Official MBPP limits (subject VI.1.1), cumulative over the whole task.
+MAX_INPUT_TOKENS = 6_000
+MAX_OUTPUT_TOKENS = 1_500
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CLI for mbpp agent")
     parser.add_argument(
@@ -39,6 +43,18 @@ if __name__ == "__main__":
         type=str,
         default="https://api.groq.com/openai/v1",
         help="URL of the LLM provider",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=10,
+        help="Maximum number of agent loop iterations (limit: 10)",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=350,
+        help="Maximum output tokens per LLM request",
     )
     args = parser.parse_args()
     try:
@@ -160,10 +176,15 @@ if __name__ == "__main__":
                 sys_prompt=sys_prompt,
                 task=task_str,
                 task_id=str(task.task_id),
-                limits=350,
                 benchmark_name="MBPP",
                 provider=args.provider_url,
                 model_name=args.model_name,
+                max_tokens=args.max_tokens,
+                max_iterations=args.max_iterations,
+                max_input_tokens=MAX_INPUT_TOKENS,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                max_observation_chars=1500,
+                history_window=6,
             )
             res = agent.execute()
             try:

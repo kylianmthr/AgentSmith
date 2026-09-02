@@ -84,11 +84,13 @@ class Client:
                     cooldown = min(2**retries, 30)
                     print(f"Switching to the next API key in {cooldown}...")
                     self.current_api_key_index += 1
-                    print("Before:", self.client.api_key)
                     self.client.api_key = self.api_keys[
                         self.current_api_key_index
                     ]
-                    print("After:", self.client.api_key)
+                    print(
+                        f"Now using API key #{self.current_api_key_index + 1} "
+                        f"of {len(self.api_keys)}"
+                    )
                     retries += 1
                     time.sleep(cooldown)
                 else:
