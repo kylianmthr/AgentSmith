@@ -14,18 +14,28 @@ class Agent:
         sys_prompt: str,
         task: str,
         task_id: str,
-        limits: int,
         benchmark_name: str,
         provider: str,
         model_name: str,
+        max_tokens: int,
+        max_iterations: int,
+        max_input_tokens: int,
+        max_output_tokens: int,
+        max_observation_chars: int = 4000,
+        history_window: int = 8,
     ) -> None:
         self.sandbox = sandbox
         self.sys_prompt = sys_prompt
         self.task = task
-        self.limits = limits
         self.benchmark_name = benchmark_name
         self.provider = provider
         self.model_name = model_name
+        self.max_tokens = max_tokens
+        self.max_iterations = max_iterations
+        self.max_input_tokens = max_input_tokens
+        self.max_output_tokens = max_output_tokens
+        self.max_observation_chars = max_observation_chars
+        self.history_window = history_window
         self.result: SolutionOutput = SolutionOutput(
             task_id=task_id,
             benchmark=self.benchmark_name,
@@ -40,6 +50,70 @@ class Agent:
             total_time_seconds=0.0,
         )
 
+    def truncate_observation(self, text: str) -> str:
+        if len(text) <= self.max_observation_chars:
+            return text
+        dropped = len(text) - self.max_observation_chars
+        return (
+            f"{text[: self.max_observation_chars]}\n"
+            f"[OBSERVATION TRUNCATED: {dropped} characters dropped. Narrow "
+            "your next call to see the rest.]"
+        )
+
+    def build_observation(self, sandbox_res, warning: str | None) -> str:
+        parts = []
+        if warning:
+            parts.append(f"warning: {warning}")
+        parts.append(f"stdout: {self.truncate_observation(sandbox_res.stdout)}")
+        if sandbox_res.stderr:
+            parts.append(
+                f"stderr: {self.truncate_observation(sandbox_res.stderr)}"
+            )
+        if sandbox_res.error:
+            parts.append(f"code error: {sandbox_res.error}")
+        if not sandbox_res.stdout.strip() and not sandbox_res.error:
+            parts.append(
+                "note: the observation is empty because your code printed "
+                "nothing. Wrap every tool call in print()."
+            )
+        return "\n".join(parts)
+
+    def trim_history(
+        self, history: list[ChatCompletionMessageParam]
+    ) -> list[ChatCompletionMessageParam]:
+        """Keep the system prompt, the task, and the last exchanges.
+
+        The cumulative input token budget is spent on every request, so an
+        ever-growing history blows it long before the iteration limit.
+        """
+        head, tail = history[:2], history[2:]
+        if len(tail) <= self.history_window:
+            return history
+        dropped = len(tail) - self.history_window
+        note: ChatCompletionMessageParam = {
+            "role": "user",
+            "content": (
+                f"[{dropped} earlier messages were dropped to stay within the "
+                "input token budget. Work from the current state of the "
+                "repository, re-read what you need instead of relying on "
+                "those messages.]"
+            ),
+        }
+        return head + [note] + tail[-self.history_window :]
+
+    def budget_exceeded(self) -> str | None:
+        if self.result.total_input_tokens >= self.max_input_tokens:
+            return (
+                f"Input token budget exhausted "
+                f"({self.result.total_input_tokens}/{self.max_input_tokens})"
+            )
+        if self.result.total_output_tokens >= self.max_output_tokens:
+            return (
+                f"Output token budget exhausted "
+                f"({self.result.total_output_tokens}/{self.max_output_tokens})"
+            )
+        return None
+
     def execute(self):
         history: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": self.sys_prompt},
@@ -48,62 +122,89 @@ class Agent:
         dotenv = DotEnvLoader()
         dotenv.load()
         start_time = time.time()
-        max_retries = 10 if self.benchmark_name == "MBPP" else 30
         try:
             if not dotenv.api_key:
                 raise ValueError("API Key not defined.")
             client = Client(
                 api_url=self.provider,
                 model_name=self.model_name,
-                max_tokens=self.limits,
+                max_tokens=self.max_tokens,
                 api_keys=dotenv.api_key,
             )
             extractor = CodeExtractor()
             i = 0
-            while i < max_retries:
+            while i < self.max_iterations:
+                exhausted = self.budget_exceeded()
+                if exhausted:
+                    self.result.error = exhausted
+                    break
+                history = self.trim_history(history)
                 self.result.iterations += 1
                 res = client.generate(conversation=history)
                 self.result.total_requests += 1
                 self.result.total_input_tokens += res.input_tokens
                 self.result.total_output_tokens += res.output_tokens
-                print("=== LLM output ===")
+                print(f"=== LLM output (step {i + 1}) ===")
                 print(res.llm_output)
-                print("==================")
                 history.append(
                     {"role": "assistant", "content": res.llm_output}
                 )
-                code = extractor.extract(res.llm_output)
-                print(code)
-                sandbox_res = self.sandbox.run(code)
-                step = StepMetrics(
-                    step=i + 1,
-                    input_tokens=res.input_tokens,
-                    output_tokens=res.output_tokens,
-                    request_time_ms=res.request_time_ms,
-                    api_url=self.provider,
-                    model_name=self.model_name,
-                    llm_output=res.llm_output,
-                    sandbox_input=code,
-                    sandbox_output=sandbox_res.stdout,
-                    retries=res.retries,
+                extracted = extractor.extract(res.llm_output)
+                if extracted.code is None:
+                    print(f"=== No code extracted: {extracted.warning}")
+                    history.append(
+                        {"role": "user", "content": extracted.warning or ""}
+                    )
+                    self.result.steps.append(
+                        StepMetrics(
+                            step=i + 1,
+                            input_tokens=res.input_tokens,
+                            output_tokens=res.output_tokens,
+                            request_time_ms=res.request_time_ms,
+                            api_url=self.provider,
+                            model_name=self.model_name,
+                            llm_output=res.llm_output,
+                            sandbox_input="",
+                            sandbox_output=extracted.warning or "",
+                            retries=res.retries,
+                        )
+                    )
+                    i += 1
+                    continue
+                print("=== Code sent to sandbox ===")
+                print(extracted.code)
+                sandbox_res = self.sandbox.run(extracted.code)
+                observation = self.build_observation(
+                    sandbox_res, extracted.warning
                 )
-                self.result.steps.append(step)
+                self.result.steps.append(
+                    StepMetrics(
+                        step=i + 1,
+                        input_tokens=res.input_tokens,
+                        output_tokens=res.output_tokens,
+                        request_time_ms=res.request_time_ms,
+                        api_url=self.provider,
+                        model_name=self.model_name,
+                        llm_output=res.llm_output,
+                        sandbox_input=extracted.code,
+                        sandbox_output=sandbox_res.stdout,
+                        retries=res.retries,
+                    )
+                )
                 if sandbox_res.final_answer:
                     self.result.success = True
                     self.result.solution = sandbox_res.final_answer
                     break
-                history.append(
-                    {
-                        "role": "user",
-                        "content": f"stdout: {sandbox_res.stdout}\nstderr: {sandbox_res.stderr}\ncode error: {sandbox_res.error}",
-                    }
-                )
+                if self.sandbox.broken:
+                    self.result.error = (
+                        "Sandbox is unrecoverable: "
+                        f"{sandbox_res.error or 'unknown'}"
+                    )
+                    break
+                history.append({"role": "user", "content": observation})
                 i += 1
-                print("==== Sandbox res ====")
-                print(sandbox_res)
-                print("====== History ======")
-                print(history)
-                print("=====================")
+                print("=== Observation ===")
+                print(observation)
         except Exception as e:
             self.result.error = str(e)
         self.result.total_time_seconds = time.time() - start_time
