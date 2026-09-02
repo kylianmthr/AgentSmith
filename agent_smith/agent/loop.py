@@ -6,6 +6,9 @@ from agent_smith.agent.code_extractor import CodeExtractor
 from agent_smith.models.agent_output import SolutionOutput, StepMetrics
 import time
 
+# What the moulinette checks before it even runs the evaluation.
+PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
+
 
 class Agent:
     def __init__(
@@ -101,6 +104,23 @@ class Agent:
         }
         return head + [note] + tail[-self.history_window :]
 
+    def rejected_final_answer(self, answer: str) -> str | None:
+        """Refuse a SWE-bench submission that is not a git patch.
+
+        Without this the agent reports success on a prose answer and the
+        moulinette rejects it with "Solution doesn't look like a git patch".
+        """
+        if self.benchmark_name != "SWEBench":
+            return None
+        if any(marker in answer for marker in PATCH_MARKERS):
+            return None
+        return (
+            "final_answer() was REJECTED: what you submitted is not a git "
+            "patch. The solution must be the unified diff of your changes. "
+            "Apply the fix with edit_file, check it with run_tests, then call "
+            "final_answer(get_patch()). Never describe the fix in prose."
+        )
+
     def budget_exceeded(self) -> str | None:
         if self.result.total_input_tokens >= self.max_input_tokens:
             return (
@@ -192,9 +212,14 @@ class Agent:
                     )
                 )
                 if sandbox_res.final_answer:
-                    self.result.success = True
-                    self.result.solution = sandbox_res.final_answer
-                    break
+                    rejection = self.rejected_final_answer(
+                        sandbox_res.final_answer
+                    )
+                    if rejection is None:
+                        self.result.success = True
+                        self.result.solution = sandbox_res.final_answer
+                        break
+                    observation = rejection
                 if self.sandbox.broken:
                     self.result.error = (
                         "Sandbox is unrecoverable: "
