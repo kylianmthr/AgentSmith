@@ -11,4 +11,4 @@ class DotEnvLoader:
         api_key = os.getenv("API_KEY")
         if api_key:
             self.api_key = api_key.split(",")
-            print(self.api_key)
+            print(f"{len(self.api_key)} API key(s) loaded from environment")
