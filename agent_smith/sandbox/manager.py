@@ -58,18 +58,26 @@ class SandboxManager:
         self,
         config_path: Path | None,
         mcp_config: dict[str, Any] | None = None,
+        run_timeout: float | None = None,
+        start_timeout: float = 600,
     ) -> None:
-        self.start_timeout = 120
+        self.start_timeout = start_timeout
         try:
             self.config = SandboxConfigValidator.load(config_path)
             if mcp_config is None:
                 self.mcp_config = None
             else:
                 self.mcp_config = mcp_config
+            self.run_timeout = (
+                run_timeout
+                if run_timeout is not None
+                else self.config.max_execution_time_seconds + 300
+            )
             self.input_queue = Queue()
             self.output_queue = Queue()
             self.process: Process | None = None
             self.history: list[SandboxResult] = []
+            self.broken = False
         except (SandboxConfigError, TypeError) as e:
             raise SandboxManagerError(e)
 
@@ -109,6 +117,20 @@ class SandboxManager:
             )
 
     def run(self, python_code: str) -> SandboxResult:
+        if self.broken:
+            # Restarting would spawn a fresh MCP server, hence a fresh
+            # container, silently discarding every edit made so far. Fail
+            # loudly instead of pretending the session survived.
+            result = SandboxResult(
+                stderr=(
+                    "Sandbox is unrecoverable: a previous run had to be killed "
+                    "and the execution environment was lost."
+                ),
+                error="SandboxUnavailable",
+                success=False,
+            )
+            self.history.append(result)
+            return result
         self.start()
         self.input_queue.put(
             {
@@ -117,14 +139,17 @@ class SandboxManager:
             }
         )
         try:
-            raw_result = self.output_queue.get(
-                timeout=self.config.max_execution_time_seconds + 300,
-            )
+            raw_result = self.output_queue.get(timeout=self.run_timeout)
             result = SandboxResult(**raw_result)
         except Empty:
             self.stop(force=True)
+            self.broken = True
             result = SandboxResult(
-                stderr=f"Sandbox execution timed out after {self.config.max_execution_time_seconds} seconds",
+                stderr=(
+                    f"Sandbox execution timed out after {self.run_timeout} "
+                    "seconds and the worker had to be killed. Any partial "
+                    "output was lost."
+                ),
                 error="TimeoutError",
                 success=False,
             )

@@ -4,6 +4,7 @@ from multiprocessing import Queue
 import resource
 import signal
 import os
+import sys
 from typing import Any
 
 from agent_smith.sandbox.code_validator import (
@@ -131,9 +132,38 @@ class SandboxWorker:
             if message["type"] == "list_tools":
                 self.output_queue.put(self.list_tools())
 
+    MEMORY_LIMIT_NAMES = ("RLIMIT_AS", "RLIMIT_DATA")
+
     def apply_memory_limit(self) -> None:
+        """Cap the worker's address space.
+
+        Linux honours RLIMIT_AS, which is what the security tests check.
+        Darwin refuses to lower RLIMIT_AS and RLIMIT_DATA altogether, so the
+        limit is unenforceable there: warn loudly and keep going rather than
+        making the sandbox unusable on the development machine.
+        """
         limit_bytes = self.max_memory_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+        for limit_name in self.MEMORY_LIMIT_NAMES:
+            limit = getattr(resource, limit_name, None)
+            if limit is None:
+                continue
+            try:
+                resource.setrlimit(limit, (limit_bytes, limit_bytes))
+                return
+            except (ValueError, OSError):
+                continue
+        if sys.platform.startswith("linux"):
+            raise RuntimeError(
+                "Cannot apply the sandbox memory limit "
+                f"({self.max_memory_mb} MB): setrlimit was refused."
+            )
+        print(
+            f"WARNING: the {sys.platform} kernel refuses to lower RLIMIT_AS "
+            f"and RLIMIT_DATA, so the {self.max_memory_mb} MB sandbox memory "
+            "limit is NOT enforced here. It is enforced on Linux, where the "
+            "evaluation runs.",
+            file=sys.stderr,
+        )
 
     def exec_with_timeout(
         self,
