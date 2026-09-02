@@ -213,7 +213,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model-name",
         type=str,
-        default="openai/gpt-oss-120b",
+        default="qwen/qwen3.8-27b",
         help="Name of the model to use",
     )
     parser.add_argument(
