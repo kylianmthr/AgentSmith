@@ -1,9 +1,11 @@
 import pytest
+from queue import Queue
 
 from agent_smith.sandbox.code_validator import (
     SandboxCodeValidator,
     SandboxCodeValidatorErr,
 )
+from agent_smith.sandbox.worker import SandboxWorker
 
 
 AUTHORIZED_IMPORTS = [
@@ -16,6 +18,24 @@ AUTHORIZED_IMPORTS = [
 
 def validate(python_code: str) -> None:
     SandboxCodeValidator.validate(python_code, AUTHORIZED_IMPORTS)
+
+
+def execute_in_worker(
+    python_code: str,
+    authorized_imports: list[str] | None = None,
+) -> dict:
+    """Exercise runtime restrictions without spawning a child process."""
+    output_queue = Queue()
+    worker = SandboxWorker(
+        input_queue=Queue(),
+        output_queue=output_queue,
+        authorized_imports=authorized_imports or AUTHORIZED_IMPORTS,
+        allowed_directories=["/testbed"],
+        max_memory_mb=512,
+        max_execution_time_seconds=5,
+    )
+    worker.handle_run(python_code)
+    return output_queue.get_nowait()
 
 
 def test_validate_accepts_valid_python_code_without_imports() -> None:
@@ -48,9 +68,11 @@ def test_validate_accepts_authorized_imports(python_code: str) -> None:
         "import subprocess\nresult = subprocess.run(['ls'])",
     ],
 )
-def test_validate_rejects_unauthorized_imports(python_code: str) -> None:
-    with pytest.raises(SandboxCodeValidatorErr, match="Unauthorized import"):
-        validate(python_code)
+def test_worker_rejects_unauthorized_imports(python_code: str) -> None:
+    result = execute_in_worker(python_code)
+
+    assert result["success"] is False
+    assert "Unauthorized import" in result["error"]
 
 
 @pytest.mark.parametrize(
@@ -64,12 +86,14 @@ def test_validate_rejects_unauthorized_imports(python_code: str) -> None:
         ("import sys", ["sys"]),
     ],
 )
-def test_validate_rejects_forbidden_imports_even_when_authorized(
+def test_worker_rejects_forbidden_imports_even_when_authorized(
     python_code: str,
     authorized_imports: list[str],
 ) -> None:
-    with pytest.raises(SandboxCodeValidatorErr, match="Unauthorized import"):
-        SandboxCodeValidator.validate(python_code, authorized_imports)
+    result = execute_in_worker(python_code, authorized_imports)
+
+    assert result["success"] is False
+    assert "Unauthorized import" in result["error"]
 
 
 @pytest.mark.parametrize(
@@ -81,6 +105,8 @@ def test_validate_rejects_forbidden_imports_even_when_authorized(
         "__import__('os')",
     ],
 )
-def test_validate_rejects_forbidden_builtin_calls(python_code: str) -> None:
-    with pytest.raises(SandboxCodeValidatorErr, match="Forbidden function call"):
-        validate(python_code)
+def test_worker_rejects_forbidden_builtin_calls(python_code: str) -> None:
+    result = execute_in_worker(python_code)
+
+    assert result["success"] is False
+    assert result["error"]

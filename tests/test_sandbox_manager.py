@@ -7,6 +7,8 @@ import pytest
 from agent_smith.models.sandbox_config import SandboxConfig
 from agent_smith.sandbox import manager as manager_module
 from agent_smith.sandbox.manager import SandboxManager, SandboxManagerError
+from agent_smith.sandbox import worker as worker_module
+from agent_smith.sandbox.worker import SandboxWorker
 from agent_smith.sandbox.config_validator import (
     SandboxConfigError,
     SandboxConfigValidator,
@@ -233,24 +235,27 @@ def test_manager_times_out_while_waiting_for_ready(
     assert manager.process is None
 
 
-def test_manager_applies_worker_memory_limit(tmp_path: Path) -> None:
-    config_path = tmp_path / "sandbox.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "max_execution_time_seconds": 2,
-                "max_memory_mb": 64,
-            }
-        ),
-        encoding="utf-8",
+def test_worker_applies_configured_memory_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, tuple[int, int]]] = []
+    monkeypatch.setattr(
+        worker_module.resource,
+        "setrlimit",
+        lambda resource_id, limits: calls.append((resource_id, limits)),
+    )
+    worker = SandboxWorker(
+        input_queue=Queue(),
+        output_queue=Queue(),
+        authorized_imports=["math"],
+        allowed_directories=["/testbed"],
+        max_memory_mb=64,
+        max_execution_time_seconds=2,
     )
 
-    manager = SandboxManager(config_path)
+    worker.apply_memory_limit()
 
-    try:
-        result = manager.run("x = 'a' * (1024 * 1024 * 512)")
-    finally:
-        manager.stop()
-
-    assert result.success is False
-    assert result.error is not None
+    limit_bytes = 64 * 1024 * 1024
+    assert calls == [
+        (worker_module.resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+    ]

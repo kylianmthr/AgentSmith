@@ -225,6 +225,7 @@ class TestREPLInteractiveRun:
         fake_sandbox = FakeSandbox()
         repl = make_repl_with_fake_sandbox(fake_sandbox)
         lines = iter(["x = 1", "exit"])
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr("builtins.input", lambda prompt: next(lines))
 
         repl.run()
@@ -245,6 +246,7 @@ class TestREPLInteractiveRun:
             "",
             "exit",
         ])
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr("builtins.input", lambda prompt: next(lines))
 
         repl.run()
@@ -262,6 +264,7 @@ class TestREPLInteractiveRun:
         fake_sandbox = FakeSandbox()
         repl = make_repl_with_fake_sandbox(fake_sandbox)
         lines = iter(["bad )", "exit"])
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr("builtins.input", lambda prompt: next(lines))
 
         repl.run()
@@ -277,6 +280,7 @@ class TestREPLInteractiveRun:
         def raise_eof(prompt: str) -> str:
             raise EOFError
 
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr("builtins.input", raise_eof)
 
         repl.run()

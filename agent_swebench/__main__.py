@@ -225,7 +225,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-iterations",
         type=int,
-        default=10,
+        default=30,
         help="Maximum number of agent loop iterations (limit: 30)",
     )
     parser.add_argument(
