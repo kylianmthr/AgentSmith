@@ -90,6 +90,7 @@ class SandboxWorker:
             "ZeroDivisionError": ZeroDivisionError,
             "KeyError": KeyError,
             "__import__": self.safe_import,
+            "open": self.safe_open,
         }
         namespace = {
             "__builtins__": allowed_builtins,
@@ -246,6 +247,53 @@ class SandboxWorker:
                     "success": False,
                 }
             )
+
+    def safe_open(
+        self,
+        file,
+        mode="r",
+        buffering=-1,
+        encoding=None,
+        errors=None,
+        newline=None,
+        closefd=True,
+        opener=None,
+    ):
+        if opener is not None:
+            raise PermissionError("Custom openers are not allowed")
+        try:
+            requested_path = os.path.realpath(
+                os.path.abspath(os.fspath(file))
+            )
+        except (TypeError, ValueError, OSError) as error:
+            raise PermissionError("Invalid file path") from error
+        allowed = False
+        for directory in self.allowed_directories:
+            allowed_directory = os.path.realpath(
+                os.path.abspath(directory)
+            )
+            try:
+                if (os.path.commonpath(
+                        [requested_path, allowed_directory]
+                    ) == allowed_directory):
+                    allowed = True
+                    break
+            except ValueError:
+                continue
+        if not allowed:
+            raise PermissionError(
+                f"File access outside allowed directories: {requested_path}"
+            )
+        return open(
+            requested_path,
+            mode,
+            buffering,
+            encoding,
+            errors,
+            newline,
+            closefd,
+            opener,
+        )
 
     def safe_import(self, name, globals=None, locals=None, fromlist=(), level=0):
         if not AstValidator.is_authorized_import(name, self.authorized_imports):
