@@ -31,9 +31,7 @@ class Client:
         )
         self.api_keys = api_keys
 
-    def generate(
-        self, conversation: list[ChatCompletionMessageParam]
-    ) -> LLMResponse:
+    def generate(self, conversation: list[ChatCompletionMessageParam]) -> LLMResponse:
         max_retry = 5
         cooldown = 0
         retries = 0
@@ -68,30 +66,22 @@ class Client:
                 print(f"API error: {e}. Retrying in {cooldown} seconds...")
                 cooldown = min(2**retries, 30)
                 retries += 1
-                if (
-                    retries >= max_retry + 1
-                ):  # la premiere attemps + les retries
+                if retries >= max_retry + 1:  # la premiere attemps + les retries
                     raise e
                 time.sleep(cooldown)
             except (PermissionDeniedError, RateLimitError) as e:
-                print(
-                    f"Permission denied: {e}. Check your API key and permissions."
-                )
-                if (
-                    self.current_api_key_index + 1 < len(self.api_keys)
-                    and retries < max_retry + 1
-                ):
-                    cooldown = min(2**retries, 30)
-                    print(f"Switching to the next API key in {cooldown}...")
-                    self.current_api_key_index += 1
-                    self.client.api_key = self.api_keys[
-                        self.current_api_key_index
-                    ]
-                    print(
-                        f"Now using API key #{self.current_api_key_index + 1} "
-                        f"of {len(self.api_keys)}"
-                    )
-                    retries += 1
-                    time.sleep(cooldown)
-                else:
+                print(f"Rate limit or permission error: {e}")
+                if retries >= max_retry:
                     raise e
+                cooldown = min(max(3, 2**retries), 20)
+                if self.current_api_key_index + 1 < len(self.api_keys):
+                    self.current_api_key_index += 1
+                    self.client.api_key = self.api_keys[self.current_api_key_index]
+                    print(
+                        f"Switching to API key #{self.current_api_key_index + 1} "
+                        f"of {len(self.api_keys)} in {cooldown}s..."
+                    )
+                else:
+                    print(f"No spare API key, retrying in {cooldown}s...")
+                retries += 1
+                time.sleep(cooldown)
