@@ -14,11 +14,14 @@ from agent_smith.sandbox.code_validator import (
 from agent_smith.mcp_client.client_MCP import SandboxMCPClient
 from agent_smith.sandbox.ast_validator import AstValidator
 
+
 class SandboxExecutionTimeout(BaseException):
     pass
 
+
 def _timeout_handler(_signum, _frame):
     raise SandboxExecutionTimeout()
+
 
 class SandboxWorker:
     def __init__(
@@ -97,10 +100,12 @@ class SandboxWorker:
         }
         if self.mcp_client is not None:
             wrappers = self.mcp_client.tools.create_tool_wrappers()
-            namespace.update({
-                name: self.pause_timeout_around(wrapper)
-                for name, wrapper in wrappers.items()
-            })
+            namespace.update(
+                {
+                    name: self.pause_timeout_around(wrapper)
+                    for name, wrapper in wrappers.items()
+                }
+            )
         return namespace
 
     def pause_timeout_around(self, func):
@@ -111,9 +116,12 @@ class SandboxWorker:
             finally:
                 if remaining > 0:
                     signal.setitimer(signal.ITIMER_REAL, remaining)
+
         return wrapped
 
-    def final_answer(self, value: str) -> None:
+    def final_answer(self, value: str | None = None, **kwargs) -> None:
+        if value is None and kwargs:
+            value = next(iter(kwargs.values()))
         self.final_answer_value = value
 
     def list_tools(self) -> list[str]:
@@ -168,7 +176,7 @@ class SandboxWorker:
     def exec_with_timeout(
         self,
         python_code: str,
-        ) -> None:
+    ) -> None:
         previous_handler = signal.getsignal(signal.SIGALRM)
 
         signal.signal(signal.SIGALRM, _timeout_handler)
@@ -178,8 +186,6 @@ class SandboxWorker:
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, previous_handler)
-
-
 
     def handle_run(self, python_code: str) -> None:
         stdout_buffer = StringIO()
@@ -204,13 +210,16 @@ class SandboxWorker:
             )
 
         except SandboxExecutionTimeout:
-            self.output_queue.put({
-                "stdout": stdout_buffer.getvalue(),
-                "stderr": stderr_buffer.getvalue() + "\nSandbox execution timed out...",
-                "error": "TimeoutError",
-                "final_answer": self.final_answer_value,
-                "success": False,
-            })
+            self.output_queue.put(
+                {
+                    "stdout": stdout_buffer.getvalue(),
+                    "stderr": stderr_buffer.getvalue()
+                    + "\nSandbox execution timed out...",
+                    "error": "TimeoutError",
+                    "final_answer": self.final_answer_value,
+                    "success": False,
+                }
+            )
 
         except SandboxCodeValidatorErr as error:
             self.output_queue.put(
@@ -268,12 +277,14 @@ def worker_entrypoint(
     mcp_config: dict | None = None,
 ) -> None:
     worker = None
+
     def handle_sigterm(_signum: int, _frame: Any) -> None:
         try:
             if worker is not None:
                 worker.cleanup()
         finally:
             os._exit(0)
+
     signal.signal(signal.SIGTERM, handle_sigterm)
     try:
         worker = SandboxWorker(
