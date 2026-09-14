@@ -200,6 +200,58 @@ def test_real_worker_completes_ready_handshake() -> None:
     assert result.stdout == "ready\n"
 
 
+def test_real_worker_allows_file_access_inside_allowed_directory(
+    tmp_path: Path,
+) -> None:
+    allowed_directory = tmp_path / "allowed"
+    allowed_directory.mkdir()
+    config_path = tmp_path / "sandbox.json"
+    config_path.write_text(
+        json.dumps({"allowed_directories": [str(allowed_directory)]}),
+        encoding="utf-8",
+    )
+    target = allowed_directory / "result.txt"
+    manager = SandboxManager(config_path)
+
+    try:
+        result = manager.run(
+            f"handle = open({str(target)!r}, 'w')\n"
+            "handle.write('sandboxed')\n"
+            "handle.close()\n"
+            f"print(open({str(target)!r}).read())"
+        )
+    finally:
+        manager.stop()
+
+    assert result.success is True
+    assert result.stdout == "sandboxed\n"
+    assert target.read_text(encoding="utf-8") == "sandboxed"
+
+
+def test_real_worker_rejects_file_access_outside_allowed_directory(
+    tmp_path: Path,
+) -> None:
+    allowed_directory = tmp_path / "allowed"
+    allowed_directory.mkdir()
+    config_path = tmp_path / "sandbox.json"
+    config_path.write_text(
+        json.dumps({"allowed_directories": [str(allowed_directory)]}),
+        encoding="utf-8",
+    )
+    outside_target = tmp_path / "outside.txt"
+    manager = SandboxManager(config_path)
+
+    try:
+        result = manager.run(f"open({str(outside_target)!r}, 'w')")
+    finally:
+        manager.stop()
+
+    assert result.success is False
+    assert result.error is not None
+    assert "File access outside allowed directories" in result.error
+    assert not outside_target.exists()
+
+
 def test_manager_rejects_worker_startup_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
