@@ -725,10 +725,17 @@ def run_tests() -> str:
     EDITABLE_INSTALL_DONE = True
     combined = (res.output or b"").decode("utf-8", errors="replace")
     section, found = _test_section(combined)
-    verdict = "OK" if found else f"FAIL (exit code: {res.exit_code})"
-    note = "" if found else "\n[NO TEST FOUND, return raw output]"
+    if found:
+        status = (
+            "TEST OUTPUT AVAILABLE - inspect the failures and errors below; "
+            "the markers do not mean that tests passed"
+        )
+        note = ""
+    else:
+        status = f"NO TEST OUTPUT FOUND (script exit code: {res.exit_code})"
+        note = "\n[Returning raw output]"
     body = _summarize(section, budget=6000)
-    return f"Exit code: {res.exit_code}\nVerdict: {verdict}{note}\n\n{body}"
+    return f"Exit code: {res.exit_code}\nStatus: {status}{note}\n\n{body}"
 
 
 @mcp.tool()

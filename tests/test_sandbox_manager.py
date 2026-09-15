@@ -355,7 +355,7 @@ def test_real_worker_rejects_file_access_outside_allowed_directory(
         ("import os", "Unauthorized import: os"),
         ("eval('1 + 1')", "name 'eval' is not defined"),
         ("exec('print(1)')", "name 'exec' is not defined"),
-        ("__import__('os')", "Unauthorized import: os"),
+        ("__import__('os')", "Dynamic imports are forbidden"),
     ],
 )
 def test_real_worker_enforces_runtime_restrictions(

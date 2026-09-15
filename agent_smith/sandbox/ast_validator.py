@@ -62,6 +62,12 @@ class AstValidator:
                 self.validate_attribute(node)
             elif isinstance(node, ast.ExceptHandler):
                 self.validate_except_handler(node)
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "__import__"
+            ):
+                raise AstValidatorErr("Dynamic imports are forbidden")
 
     def validate_attribute(self, node: ast.Attribute) -> None:
         """Reject private and explicitly forbidden attributes."""

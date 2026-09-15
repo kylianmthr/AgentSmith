@@ -79,11 +79,22 @@ def test_import_policy_rejects_forbidden_imports_even_when_configured(
     [
         "eval('1 + 1')",
         "exec('print(1)')",
-        "__import__('os')",
     ],
 )
 def test_static_validator_defers_builtin_policy_to_runtime(python_code: str) -> None:
     validate(python_code)
+
+
+@pytest.mark.parametrize(
+    "python_code",
+    [
+        "__import__('math')",
+        "__import__('os')",
+    ],
+)
+def test_validate_rejects_dynamic_imports(python_code: str) -> None:
+    with pytest.raises(SandboxCodeValidatorErr, match="Dynamic imports are forbidden"):
+        validate(python_code)
 
 
 def test_validate_accepts_open_for_safe_runtime_wrapper() -> None:
