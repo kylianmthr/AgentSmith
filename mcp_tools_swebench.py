@@ -38,6 +38,8 @@ logger = logging.getLogger("swebench-tools")
 
 
 def cleanup_container() -> None:
+    """Stop and remove the active SWE-bench container."""
+
     global CONTAINER
     container, CONTAINER = CONTAINER, None
     if container is None:
@@ -53,11 +55,15 @@ def cleanup_container() -> None:
 
 
 def _handle_termination(_signum, _frame):
+    """Clean up the container before process termination."""
+
     cleanup_container()
     os._exit(0)
 
 
 def load_task_file(path: str) -> bool:
+    """Load a SWE-bench task and start its container."""
+
     global DOCKER_IMAGE
     global CLIENT
     global CONTAINER
@@ -97,6 +103,8 @@ def load_task_file(path: str) -> bool:
 
 
 def start_testbed_container() -> bool:
+    """Start a development container for TESTBED_PATH."""
+
     global CLIENT
     global CONTAINER
 
@@ -127,6 +135,8 @@ def start_testbed_container() -> bool:
 
 
 def _container_python() -> str:
+    """Return an available Python executable in the container."""
+
     global PYTHON_BIN
     if PYTHON_BIN is not None:
         return PYTHON_BIN
@@ -148,6 +158,8 @@ def _container_python() -> str:
 
 
 def _truncate(text: str, budget: int = OUTPUT_BUDGET) -> str:
+    """Limit tool output and include recovery guidance."""
+
     if len(text) <= budget:
         return text
     kept = text[:budget]
@@ -160,6 +172,8 @@ def _truncate(text: str, budget: int = OUTPUT_BUDGET) -> str:
 
 
 def _format_grep(raw: str) -> str:
+    """Normalize grep matches for concise display."""
+
     lines = []
     for line in raw.splitlines():
         head, separator, content = line.partition(":")
@@ -175,6 +189,8 @@ def _format_grep(raw: str) -> str:
 
 
 def _format_line(content: str, start_line: int) -> str:
+    """Prefix content with one-based line numbers."""
+
     new_content = ""
     i = 0
     for line in content.splitlines():
@@ -218,7 +234,81 @@ EDIT_SCRIPT = """
 import ast
 import base64
 import json
+import shutil
+import subprocess
 import sys
+
+
+def lint_findings(target, source):
+    ruff = shutil.which("ruff")
+    if ruff is not None:
+        try:
+            result = subprocess.run(
+                [ruff, "check", "--output-format", "json", target],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return "ruff", None, str(error)
+        if result.returncode not in (0, 1):
+            details = (result.stderr or result.stdout).strip()
+            return "ruff", None, details or "ruff failed without output"
+        try:
+            return "ruff", json.loads(result.stdout or "[]"), None
+        except json.JSONDecodeError as error:
+            return "ruff", None, "invalid ruff JSON output: %s" % error
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return "basic", [], None
+    findings = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler) and node.type is None:
+            findings.append(
+                {
+                    "code": "E722",
+                    "message": "Do not use bare except",
+                    "location": {"row": node.lineno, "column": node.col_offset + 1},
+                }
+            )
+    return "basic", findings, None
+
+
+def finding_key(finding):
+    return finding.get("code"), finding.get("message")
+
+
+def introduced_findings(before, after):
+    existing = [finding_key(finding) for finding in before]
+    introduced = []
+    for finding in after:
+        key = finding_key(finding)
+        if key in existing:
+            existing.remove(key)
+        else:
+            introduced.append(finding)
+    return introduced
+
+
+def format_findings(target, findings):
+    lines = []
+    for finding in findings[:20]:
+        location = finding.get("location", {})
+        lines.append(
+            "%s:%s:%s %s %s"
+            % (
+                target,
+                location.get("row", "?"),
+                location.get("column", "?"),
+                finding.get("code", "LINT"),
+                finding.get("message", "lint violation"),
+            )
+        )
+    if len(findings) > 20:
+        lines.append("%d additional lint violations not displayed" % (len(findings) - 20))
+    return "\\n".join(lines)
 
 payload = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
 path, old, new = payload["path"], payload["old"], payload["new"]
@@ -248,6 +338,12 @@ if count > 1:
     sys.exit(1)
 
 updated = source.replace(old, new, 1)
+lint_engine = None
+before_lint = []
+lint_error = None
+if path.endswith(".py"):
+    lint_engine, before_lint, lint_error = lint_findings(path, source)
+
 with open(path, "w", encoding="utf-8") as handle:
     handle.write(updated)
 
@@ -262,7 +358,30 @@ if path.endswith(".py"):
         )
         sys.exit(2)
 
-print("EDIT OK: 1 occurrence replaced in %s." % path)
+    lint_engine, after_lint, after_lint_error = lint_findings(path, updated)
+    lint_error = lint_error or after_lint_error
+    if lint_error is not None:
+        print(
+            "EDIT APPLIED BUT THE LINT CHECK FAILED in %s: %s. Review the "
+            "change before running the tests." % (path, lint_error)
+        )
+        sys.exit(3)
+    new_findings = introduced_findings(before_lint or [], after_lint or [])
+    if new_findings:
+        print(
+            "EDIT APPLIED BUT IT INTRODUCED LINT VIOLATIONS in %s (%s):\\n%s\\n"
+            "Fix them with another edit_file call before running the tests."
+            % (path, lint_engine, format_findings(path, new_findings))
+        )
+        sys.exit(3)
+
+if path.endswith(".py"):
+    print(
+        "EDIT OK: 1 occurrence replaced in %s. No new lint violations (%s)."
+        % (path, lint_engine)
+    )
+else:
+    print("EDIT OK: 1 occurrence replaced in %s." % path)
 """
 
 
@@ -281,8 +400,9 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
         new_str: The string to replace it with.
 
     Returns:
-        "EDIT OK: ..." on success, or "EDIT FAILED: ..." explaining why
-        nothing was modified.
+        "EDIT OK: ..." on success. Matching failures leave the file untouched;
+        syntax and lint diagnostics are returned after applying the edit so a
+        follow-up edit can repair it.
     """
     if CONTAINER is None:
         return (
@@ -432,6 +552,8 @@ def search_function_or_class_definition_in_code(name: str) -> str:
 
 
 def _copy_testbed_to_host(dst: str) -> str:
+    """Copy the container testbed into a host directory."""
+
     if CONTAINER is None:
         raise RuntimeError(
             "find_references unavailable: SWE-bench container is not initialized. "
@@ -519,6 +641,8 @@ def run_command(command: str, workdir: str = "/testbed") -> str:
 
 
 def _test_section(text: str) -> tuple[str, bool]:
+    """Extract the marked test-output section when present."""
+
     i = text.find(START)
     j = text.find(END, i + 1) if i != -1 else -1
     if i != -1 and j != -1:
@@ -532,6 +656,8 @@ _EXC = re.compile(r"^\w[\w.]*(Error|Exception|Warning|Assertion)\b")
 
 
 def _summarize(output: str, budget: int = 6000, max_blocks: int = 5) -> str:
+    """Summarize traceback blocks and the output tail."""
+
     lines = output.splitlines()
     tail = lines[-40:]
 
@@ -607,6 +733,8 @@ def run_tests() -> str:
 
 @mcp.tool()
 def get_patch():
+    """Return the current unified diff from the testbed."""
+
     if TESTBED_PATH:
         res = subprocess.run(
             ["git", "-C", TESTBED_PATH, "-c", "core.fileMode=false", "diff"],
@@ -629,7 +757,7 @@ def get_patch():
     return (out or b"").decode("utf-8", errors="replace")
 
 
-@mcp.resource("mbpp://task")
+@mcp.resource("swebench://task")
 def get_task() -> str:
     """Get the informations of the current task."""
     return (
@@ -646,10 +774,24 @@ def get_task() -> str:
 
 @mcp.prompt()
 def get_prompt() -> str:
-    return "TODO"
+    """Return the SWE-bench agent methodology prompt."""
+
+    return (
+        "Solve the SWE-bench issue through a focused debugging loop:\n"
+        "1. Read the issue, hints, and the smallest relevant code section.\n"
+        "2. Form a concrete hypothesis and apply the smallest compatible edit.\n"
+        "3. Run the provided evaluation tests and inspect their final summary. "
+        "Markers, a verdict label, or an exit code alone do not prove success.\n"
+        "4. Revise from concrete failures; if the result is ambiguous, run one "
+        "focused test.\n"
+        "5. After verified passing tests, submit only the unified diff from "
+        "get_patch()."
+    )
 
 
 class TransportType(str, Enum):
+    """Supported MCP server transports."""
+
     STDIO = "stdio"
     HTTP = "http"
 

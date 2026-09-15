@@ -14,14 +14,20 @@ except KeyboardInterrupt:
     sys.exit(1)
 
 class REPLError(Exception):
+    """Report an interactive sandbox setup or execution failure."""
+
     pass
 
 class REPLInteractive:
+    """Run the sandbox in interactive or standard-input mode."""
+
     def __init__(
         self,
         config_path: Path | None,
         mcp_config: dict | None = None,
     ) -> None:
+        """Create an interactive session backed by a sandbox manager."""
+
         self.buffer = []
         try:
             self.sandbox = SandboxManager(config_path, mcp_config)
@@ -29,6 +35,8 @@ class REPLInteractive:
             raise REPLError(e)
 
     def run(self):
+        """Read, execute, and display sandbox code until exit."""
+
         prompt = "sandbox> "
         try:
             self.sandbox.start()
@@ -72,6 +80,8 @@ class REPLInteractive:
 
     @staticmethod
     def display_result(result: SandboxResult) -> None:
+        """Print a sandbox result in a human-readable form."""
+
         if result:
             print("************** RESULT: **************")
             if result.stdout:
@@ -90,6 +100,8 @@ class REPLInteractive:
             print("*************************************")
 
 def build_mcp_config_with_task(args: str) -> dict[str, Any]:
+    """Build a validated stdio server command configuration."""
+
     try:
         parts = shlex.split(args)
     except ValueError as error:
@@ -111,6 +123,8 @@ def build_mcp_config_with_task(args: str) -> dict[str, Any]:
 
 
 def parse_args() -> tuple[Path | None, dict[str, Any] | None]:
+    """Parse sandbox CLI arguments into runtime configuration."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "config_path",
@@ -156,6 +170,8 @@ def parse_args() -> tuple[Path | None, dict[str, Any] | None]:
 
 
 def main() -> None:
+    """Run the sandbox command-line interface."""
+
     try:
         config_path, mcp_config = parse_args()
         repl = REPLInteractive(config_path, mcp_config)

@@ -12,6 +12,8 @@ from agent_smith.sandbox.worker import worker_entrypoint
 
 
 class SandboxManagerError(Exception):
+    """Report sandbox process lifecycle failures."""
+
     pass
 
 
@@ -61,6 +63,8 @@ class SandboxManager:
         run_timeout: float | None = None,
         start_timeout: float = 600,
     ) -> None:
+        """Load configuration and initialize worker communication."""
+
         self.start_timeout = start_timeout
         try:
             self.config = SandboxConfigValidator.load(config_path)
@@ -82,11 +86,30 @@ class SandboxManager:
             raise SandboxManagerError(e)
 
     def list_tools(self) -> list[str]:
+        """Return prompt documentation for discovered MCP tools."""
+
         self.start()
         self.input_queue.put({"type": "list_tools"})
         return self.output_queue.get(timeout=self.config.max_execution_time_seconds)
 
+    @staticmethod
+    def _raise_control_flow(message: dict[str, Any]) -> None:
+        """Re-raise a worker control-flow exception in the parent process."""
+
+        if message.get("type") != "control_flow":
+            return
+        exception_name = message.get("exception")
+        if exception_name == "KeyboardInterrupt":
+            raise KeyboardInterrupt
+        if exception_name == "SystemExit":
+            raise SystemExit(message.get("code"))
+        raise SandboxManagerError(
+            f"Unknown worker control-flow exception: {exception_name}"
+        )
+
     def start(self) -> None:
+        """Start the worker process and wait until it is ready."""
+
         if self.process is not None and self.process.is_alive():
             return
         self.process = Process(
@@ -110,6 +133,9 @@ class SandboxManager:
                 "Sandbox worker startup timed out"
             ) from error
 
+        if message.get("type") == "control_flow":
+            self.stop(force=True)
+            self._raise_control_flow(message)
         if message.get("type") != "ready":
             self.stop(force=True)
             raise SandboxManagerError(
@@ -117,6 +143,8 @@ class SandboxManager:
             )
 
     def run(self, python_code: str) -> SandboxResult:
+        """Execute code in the worker and return its captured result."""
+
         if self.broken:
             # Restarting would spawn a fresh MCP server, hence a fresh
             # container, silently discarding every edit made so far. Fail
@@ -140,6 +168,9 @@ class SandboxManager:
         )
         try:
             raw_result = self.output_queue.get(timeout=self.run_timeout)
+            if raw_result.get("type") == "control_flow":
+                self.stop()
+                self._raise_control_flow(raw_result)
             result = SandboxResult(**raw_result)
         except Empty:
             self.stop(force=True)
@@ -157,6 +188,8 @@ class SandboxManager:
         return result
 
     def stop(self, force: bool = False) -> None:
+        """Stop the worker process and release its resources."""
+
         if self.process is None:
             return
         try:

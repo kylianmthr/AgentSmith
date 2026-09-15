@@ -24,6 +24,8 @@ logger = logging.getLogger("mbpp-tools")
 
 
 def load_task_file(path: str) -> bool:
+    """Load an MBPP task into the server state."""
+
     global TEST_LIST
     global TEST_IMPORT
     global TASK_DEFINITION
@@ -45,6 +47,8 @@ def load_task_file(path: str) -> bool:
 
 
 def last_line(stderr: str) -> str:
+    """Return the last non-empty stderr line."""
+
     lines = [line for line in stderr.strip().split("\n") if line.strip()]
     return lines[-1] if lines else ""
 
@@ -113,61 +117,29 @@ def get_task() -> str:
 
 @mcp.prompt()
 def get_prompt() -> str:
-    """Get the methodology of the mbpp agent smith resolver"""
+    """Return the MBPP agent methodology prompt."""
+
     return (
-        "You are a Python coding agent. You solve one MBPP task by iterating:\n"
+        "Solve one MBPP task with a short evidence-driven loop:\n"
         "METHOD\n"
-        "1. Write the function using the EXACT name and signature given in the task, plus any helper you need.\n"
-        "2. Verify it with run_tests before submitting.\n"
-        "3. If the tests don't validate your solution, display the return of your function\n"
-        "4. Compare it with the expected result\n"
-        "5. Fix your code accordingly\n"
+        "1. Infer the standard operation from the wording, signature, and all "
+        "examples.\n"
+        "2. Write the complete function and immediately verify it with run_tests.\n"
+        "3. On failure, re-read the assertion, calculate the actual result, and "
+        "revise the assumption that caused the mismatch; never repeat equivalent "
+        "code.\n"
+        "4. Submit immediately after every test passes.\n"
         "CONSTRAINTS\n"
-        "- Budget is tight (10 iterations max, small token budget). Aim to finish in 2-3 steps.\n"
-        "- Solution must be self-contained: include the imports it needs, no test code, no input().\n"
-        "- Do not re-explain the problem or restate code you already wrote.\n"
-        "EXAMPLE\n"
-        "- First example\n"
-        "Task: write a function `add(a, b)` that returns the sum.\n"
-        "Thought: Simple, I write it and test it right away.\n"
-        "Code:\n"
-        "solution = '''def add(a, b):\n"
-        "    return a + b\n"
-        "'''\n"
-        "print(run_tests(solution))\n"
-        "Observation: 3/3 tests passed\n"
-        "Thought: I can validate my solution\n"
-        "Code:\n"
-        "final_answer(solution)\n"
-        "- Second example\n"
-        "Task: write a function `repocc(string, char, new_char)` that replaces all occurences of a character.\n"
-        "Thought: I will use `str.replace`.\n"
-        "Code:\n"
-        "solution = '''def repocc(string, char, new_char):\n"
-        "    return string.replace(char, new_char, 1)\n"
-        "'''\n"
-        "print(run_tests(solution))\n"
-        "Observation: 1/3 tests passed\n"
-        "Thought: I need to see what my function returns\n"
-        "Code:\n"
-        "def repocc(string, char, new_char):\n"
-        "    return string.replace(char, new_char, 1)\n"
-        "print(repocc('hello', 'l', 't'))\n"  # tu devras faire en sorte que dans le sandbox ca fonctionne
-        "Observation: hetlo\n"
-        "Thought: The second occurrence of 'l' was not replaced\n"
-        "Code:\n"
-        "solution = '''def repocc(string, char, new_char):\n"
-        "    return string.replace(char, new_char)\n"
-        "'''\n"
-        "print(run_tests(solution))\n"
-        "Observation: 3/3 tests passed\n"
-        "Thought: I can validate my solution\n"
-        "Code:\n"
-        "final_answer(solution)\n"
+        "- The budget is tight: test on the first turn and finish in 2-3 turns.\n"
+        "- Keep the solution self-contained and preserve exact return types, ordering, "
+        "multiplicity, and boundary behavior.\n"
+        "- Account for hidden edge cases without overfitting the public examples."
     )
 
 
 class TransportType(str, Enum):
+    """Supported MCP server transports."""
+
     STDIO = "stdio"
     HTTP = "http"
 
@@ -240,4 +212,3 @@ if __name__ == "__main__":
         pass
     except asyncio.CancelledError:
         pass
-

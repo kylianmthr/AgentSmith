@@ -13,6 +13,8 @@ from agent_smith.llm.response import LLMResponse
 
 
 class Client:
+    """Call an OpenAI-compatible model with key rotation and retries."""
+
     def __init__(
         self,
         api_url: str,
@@ -21,22 +23,28 @@ class Client:
         api_keys: list[str],
         stop: str = "<end_code>",
     ):
+        """Configure the provider, model, output limit, and API keys."""
+
         self.api_url = api_url
         self.model_name = model_name
         self.max_tokens = max_tokens
         self.stop = stop
         self.current_api_key_index = 0
+        self.total_requests = 0
         self.client = OpenAI(
             base_url=api_url, api_key=api_keys[self.current_api_key_index]
         )
         self.api_keys = api_keys
 
     def generate(self, conversation: list[ChatCompletionMessageParam]) -> LLMResponse:
+        """Generate one tracked model response."""
+
         max_retry = 5
         cooldown = 0
         retries = 0
         while True:
             try:
+                self.total_requests += 1
                 start_time = time.perf_counter()
                 res = self.client.chat.completions.create(
                     model=self.model_name,

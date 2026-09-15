@@ -4,6 +4,8 @@ from typing import Literal
 
 
 class SandboxMCPConfig(BaseModel):
+    """Validated configuration for an MCP transport."""
+
     command: str = Field(default="python3", min_length=1, max_length=50)
     args: list[str] = Field(default_factory=list)
     cwd: Path = Field(default_factory=Path.cwd)
@@ -12,6 +14,8 @@ class SandboxMCPConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_transport(self):
+        """Require the fields needed by the selected transport."""
+
         if self.transport == "stdio":
             if not self.command:
                 raise ValueError("Command is required when using stdio")

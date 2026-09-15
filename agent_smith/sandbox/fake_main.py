@@ -2,6 +2,8 @@ from agent_smith.sandbox.manager import SandboxManager
 from pathlib import Path
 
 def test_codes(param: int = 1) -> str:
+    """Return representative sandbox code for manual checks."""
+
     if param == 1:
         return """
 x = 10
@@ -55,4 +57,3 @@ if __name__ == "__main__":
     finally:
         sandbox.stop()
 
-    

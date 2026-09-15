@@ -5,12 +5,18 @@ import os
 
 
 class StdioHandle:
+    """Manage a stdio MCP server connection."""
+
     def __init__(self, portal: BlockingPortal, config: dict[str, Any]) -> None:
+        """Store the portal and stdio transport configuration."""
+
         self.portal = portal
         self.config = config
         self.stdio_context = None
 
     def handle_stdio(self) -> tuple[Any, Any]:
+        """Launch the server and return its MCP streams."""
+
         server = StdioServerParameters(
             command=self.config["command"],
             args=self.config.get("args", []),
@@ -24,6 +30,8 @@ class StdioHandle:
         return (read_stream, write_stream)
 
     def stop(self) -> None:
+        """Close the stdio client context."""
+
         if self.stdio_context is not None:
             self.stdio_context.__exit__(None, None, None)
             self.stdio_context = None

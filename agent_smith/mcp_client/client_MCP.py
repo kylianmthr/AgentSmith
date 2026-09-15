@@ -5,16 +5,23 @@ from mcp import ClientSession
 
 
 from agent_smith.models.mcp_config import SandboxMCPConfig
+from agent_smith.mcp_client.content import MCPContentHandle
 from agent_smith.mcp_client.tools import ToolsHandle
 from agent_smith.mcp_client.stdio_handle import StdioHandle
 from agent_smith.mcp_client.http_handle import HttpHandle, HttpHandleErr
 
 
 class SandboxMCPClientError(Exception):
+    """Report an MCP client lifecycle or transport failure."""
+
     pass
 
 class SandboxMCPClient:
+    """Manage a synchronous facade over an asynchronous MCP session."""
+
     def __init__(self, config: dict[str, Any]) -> None:
+        """Validate transport configuration and initialize lifecycle state."""
+
         if not config:
             raise SandboxMCPClientError("MCP config cannot be empty")
         try:
@@ -27,8 +34,12 @@ class SandboxMCPClient:
         self.http_handle = None
         self.session_context = None
         self.session: ClientSession | None = None
+        self.tools: ToolsHandle | None = None
+        self.content: MCPContentHandle | None = None
 
     def start(self, allowed_directories: list[str]) -> None:
+        """Start the configured transport and initialize the MCP session."""
+
         if self.session is not None:
             return
         try:
@@ -39,16 +50,25 @@ class SandboxMCPClient:
                 ClientSession(read_stream, write_stream)
             )
             self.session = self.session_context.__enter__()
-            self.portal.call(self.session.initialize)
+            initialization = self.portal.call(self.session.initialize)
             if self.portal is None or self.session is None:
                 raise RuntimeError("MCP client is not started")
             self.tools = ToolsHandle(self.portal, self.session, allowed_directories)
+            capabilities = initialization.capabilities
+            self.content = MCPContentHandle(
+                self.portal,
+                self.session,
+                supports_resources=capabilities.resources is not None,
+                supports_prompts=capabilities.prompts is not None,
+            )
         except Exception as e:
             self.stop()
             raise SandboxMCPClientError(f"Error Setting up the MCP Client: {e}")
 
 
     def get_streams_from_transport(self) -> tuple[Any, Any]:
+        """Open streams for the configured MCP transport."""
+
         transport = self.config["transport"]
         if self.portal is None:
             raise SandboxMCPClientError("Portal is not started")
@@ -66,6 +86,8 @@ class SandboxMCPClient:
 
 
     def stop(self) -> None:
+        """Close the MCP session, transport, and blocking portal."""
+
         if self.session_context is not None:
             self.session_context.__exit__(None, None, None)
 
@@ -80,6 +102,8 @@ class SandboxMCPClient:
 
         self.session = None
         self.session_context = None
+        self.tools = None
+        self.content = None
         self.portal = None
         self.portal_context = None
 

@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field
 
 
 class LLMResponse(BaseModel):
+    """Normalized model response and request metrics."""
+
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     request_time_ms: float = Field(ge=0)
