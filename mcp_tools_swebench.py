@@ -76,6 +76,11 @@ def load_task_file(path: str) -> bool:
             task = SWEBenchTaskInput.model_validate_json(json_data)
             DOCKER_IMAGE = task.docker_image
             CLIENT = docker.from_env()
+            try:
+                CLIENT.images.get(DOCKER_IMAGE)
+            except docker.errors.ImageNotFound:
+                logger.info("Pulling Docker image: %s", DOCKER_IMAGE)
+                CLIENT.images.pull(DOCKER_IMAGE)
             CONTAINER = CLIENT.containers.run(
                 DOCKER_IMAGE, command="sleep infinity", detach=True, tty=True
             )
@@ -85,12 +90,6 @@ def load_task_file(path: str) -> bool:
             atexit.register(cleanup_container)
             signal.signal(signal.SIGTERM, _handle_termination)
             return True
-    except docker.errors.ImageNotFound:
-        logger.error(
-            f"Docker image not found: {DOCKER_IMAGE}. Pull it first with "
-            f"'docker pull {DOCKER_IMAGE}'."
-        )
-        return False
     except docker.errors.DockerException as e:
         logger.error(
             f"Cannot reach the Docker daemon ({e}). Start Docker Desktop or "

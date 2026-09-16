@@ -188,6 +188,13 @@ class Agent:
                 if exhausted:
                     self.result.error = exhausted
                     break
+                remaining_output_tokens = (
+                    self.max_output_tokens - self.result.total_output_tokens
+                )
+                client.max_tokens = min(
+                    self.max_tokens,
+                    remaining_output_tokens,
+                )
                 history = self.trim_history(history)
                 self.result.iterations += 1
                 res = client.generate(conversation=history)

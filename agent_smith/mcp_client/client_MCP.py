@@ -106,5 +106,3 @@ class SandboxMCPClient:
         self.content = None
         self.portal = None
         self.portal_context = None
-
-    # Fonction test pour lister les tools, je l'ai pas suppr ça peut peut être servir pour SWE BENCH

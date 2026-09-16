@@ -1,4 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
+import ctypes
 from io import StringIO
 from multiprocessing import Queue
 import resource
@@ -373,6 +374,8 @@ def worker_entrypoint(
 
     signal.signal(signal.SIGTERM, handle_sigterm)
     try:
+        if sys.platform.startswith("linux"):
+            ctypes.CDLL(None).prctl(1, signal.SIGTERM)
         worker = SandboxWorker(
             input_queue=input_queue,
             output_queue=output_queue,
@@ -386,8 +389,6 @@ def worker_entrypoint(
         worker.loop()
 
     except (KeyboardInterrupt, SystemExit):
-        # handle_run already forwarded generated control flow to the parent.
-        # A terminal interrupt reaches the parent process independently.
         pass
     except Exception as e:
         output_queue.put(

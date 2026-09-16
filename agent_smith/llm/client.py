@@ -42,10 +42,10 @@ class Client:
         max_retry = 5
         cooldown = 0
         retries = 0
+        start_time = time.perf_counter()
         while True:
             try:
                 self.total_requests += 1
-                start_time = time.perf_counter()
                 res = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=conversation,
@@ -71,11 +71,11 @@ class Client:
                 APIConnectionError,
                 InternalServerError,
             ) as e:
-                print(f"API error: {e}. Retrying in {cooldown} seconds...")
                 cooldown = min(2**retries, 30)
                 retries += 1
                 if retries >= max_retry + 1:  # la premiere attemps + les retries
                     raise e
+                print(f"API error: {e}. Retrying in {cooldown} seconds...")
                 time.sleep(cooldown)
             except (PermissionDeniedError, RateLimitError) as e:
                 print(f"Rate limit or permission error: {e}")
