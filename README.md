@@ -230,7 +230,7 @@ API secrets must stay in `.env`, which is ignored by Git. Never commit real keys
 
 The canonical model comparison belongs in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md), backed by committed `solution.json` traces. The required experiment compares at least five models on the same three or more SWE-bench tasks and records pass/fail, iterations, input/output tokens, wall time, provider reliability, at least two intermediary exploration metrics, and an ablation study.
 
-Measured benchmark data has not yet been added to this repository. This section and `BENCHMARK_REPORT.md` must be updated from real runs before project submission; results must not be estimated or fabricated.
+`BENCHMARK_REPORT.md` now contains new runs of three models on the same three SWE-bench tasks, external validation of submitted patches, and a controlled prompt ablation, all backed by `solution.json` traces. Two more models are still required before the five-model benchmark criterion is met; their results must come from real runs, not estimates.
 
 ## Resources
 
