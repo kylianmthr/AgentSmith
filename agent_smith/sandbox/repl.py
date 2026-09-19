@@ -4,7 +4,6 @@ try:
     import codeop
     from typing import Any
     import argparse
-    from urllib.parse import urlparse
     import shlex
     from shutil import which
 

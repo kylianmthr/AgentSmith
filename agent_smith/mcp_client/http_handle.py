@@ -28,23 +28,21 @@ class HttpHandle:
     def handle_http(self) -> tuple[Any, Any]:
         """Return streams for a reachable HTTP MCP server."""
 
-        if self.is_server_reachable():
-            return self.connect_http()
-        if not self.config.get("args"):
-            raise HttpHandleErr("Couldn't connect to http server (missing args)")
-        self.start_http_server()
-        self.http_launched = True
-        self.wait_for_server()
+        if not self.is_server_reachable():
+            if self.config.get("args"):
+                self.start_http_server()
+                self.http_launched = True
+            self.wait_for_server()
         return self.connect_http()
 
     def wait_for_server(self) -> None:
-        """Wait briefly for an autostarted server to accept connections."""
+        """Wait briefly for an MCP HTTP server to accept connections."""
 
         for _ in range(20):
             if self.is_server_reachable():
                 return
             time.sleep(0.25)
-        raise HttpHandleErr("HTTP MCP server did not start")
+        raise HttpHandleErr("HTTP MCP server did not become reachable")
 
     def is_server_reachable(self) -> bool:
         """Return whether the configured server socket is reachable."""
