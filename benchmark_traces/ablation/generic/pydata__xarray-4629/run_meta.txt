@@ -1,0 +1,5 @@
+model=qwen/qwen3.8-27b
+task_id=pydata__xarray-4629
+agent_exit=0
+agent_wall_seconds=606
+validation_exit=1

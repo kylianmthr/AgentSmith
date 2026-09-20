@@ -8,16 +8,17 @@ agent metrics, and a three-task prompt ablation. All values come from the linked
 `solution.json`, `run_meta.txt`, and validation logs; no missing result was
 estimated.
 
-Two OpenRouter models were unavailable because the supplied free-tier key had
-already exhausted its daily free-model quota. Their real retry and failure
-traces are retained because provider availability is part of the required
-benchmark, but those rows do not measure the underlying models' coding ability.
+Only the five models with a complete three-task cohort are retained here. Short
+compatibility or availability probes for other models were excluded because
+they did not produce comparable results on all three tasks. Nemotron uses
+NVIDIA NIM because its OpenRouter route sometimes omitted usage metadata.
 
 ## Setup
 
-The benchmark was run on 2026-09-19 from the current working tree based on Git
-revision `bc738df`. The HTTP startup fix and an unrelated REPL import cleanup
-were locally modified; neither changes the stdio SWE-bench agent loop used here.
+The original Groq and OpenRouter runs were captured on 2026-09-19 from Git
+revision `bc738df`. The direct-NVIDIA completion was captured on 2026-09-20
+from revision `2eddca0`. The local OpenRouter usage-tracking change does not
+affect the direct NVIDIA endpoint or the stdio SWE-bench agent loop.
 
 All models received the same task JSON, focused system prompt, dynamically
 generated MCP manual, tool implementation, and limits:
@@ -30,7 +31,11 @@ generated MCP manual, tool implementation, and limits:
 
 The fixed task cohort uses three tasks explicitly suggested by the project
 subject for initial SWE-bench evaluation. It spans two SymPy subsystems and one
-xarray merge bug.
+xarray merge bug. The model set covers two Groq-served general models (Qwen and
+GPT-OSS), two coding-oriented OpenRouter models (DeepSeek and Laguna), and
+Nemotron through a second independent provider, NVIDIA NIM. This gives useful
+variation in model family, provider, tool-call behavior, and reliability while
+keeping the tasks and agent implementation constant.
 
 | Code | Task | Primary changed area | Input |
 |---|---|---|---|
@@ -38,8 +43,9 @@ xarray merge bug.
 | S2 | `sympy__sympy-14711` | SymPy core/printing behavior | [task JSON](benchmark_traces/tasks/sympy__sympy-14711.json) |
 | X | `pydata__xarray-4629` | `xarray/core/merge.py` | [task JSON](benchmark_traces/tasks/pydata__xarray-4629.json) |
 
-Groq used the active comma-separated keys from the supplied `.env`. OpenRouter
-used the commented key from that file and `https://openrouter.ai/api/v1`.
+Groq and OpenRouter used the keys supplied for those runs. The Nemotron rerun
+used a separate NVIDIA API Catalog key and the OpenAI-compatible endpoint
+`https://integrate.api.nvidia.com/v1`.
 
 ## Results
 
@@ -55,19 +61,18 @@ time and excludes the subsequent external validation.
 | GPT-OSS 120B / Groq | S1 | No | 1 | 1 | 0 | 0 | 1.82 s | [JSON](benchmark_traces/runs/openai-gpt-oss-120b/sympy__sympy-13480/solution.json) / [validation](benchmark_traces/runs/openai-gpt-oss-120b/sympy__sympy-13480/validation.log) |
 | GPT-OSS 120B / Groq | S2 | No | 3 | 3 | 3,179 | 2,000 | 6.66 s | [JSON](benchmark_traces/runs/openai-gpt-oss-120b/sympy__sympy-14711/solution.json) / [validation](benchmark_traces/runs/openai-gpt-oss-120b/sympy__sympy-14711/validation.log) |
 | GPT-OSS 120B / Groq | X | Yes | 10 | 10 | 24,923 | 4,427 | 183.32 s | [JSON](benchmark_traces/runs/openai-gpt-oss-120b/pydata__xarray-4629/solution.json) / [validation](benchmark_traces/runs/openai-gpt-oss-120b/pydata__xarray-4629/validation.log) |
-| Nemotron 3 Ultra 550B / OpenRouter | S1 | No | 1 | 6 | 0 | 0 | 44.41 s | [JSON](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-free/sympy__sympy-13480/solution.json) / [validation](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-free/sympy__sympy-13480/validation.log) |
-| Nemotron 3 Ultra 550B / OpenRouter | S2 | No | 1 | 6 | 0 | 0 | 42.74 s | [JSON](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-free/sympy__sympy-14711/solution.json) / [validation](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-free/sympy__sympy-14711/validation.log) |
-| Nemotron 3 Ultra 550B / OpenRouter | X | No | 1 | 6 | 0 | 0 | 43.69 s | [JSON](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-free/pydata__xarray-4629/solution.json) / [validation](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-free/pydata__xarray-4629/validation.log) |
+| Nemotron 3 Ultra 550B / NVIDIA NIM | S1 | No | 30 | 30 | 73,336 | 2,937 | 432.21 s | [JSON](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-nim/sympy__sympy-13480/solution.json) / [validation](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-nim/sympy__sympy-13480/validation.log) |
+| Nemotron 3 Ultra 550B / NVIDIA NIM | S2 | No | 30 | 30 | 88,232 | 2,506 | 616.47 s | [JSON](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-nim/sympy__sympy-14711/solution.json) / [validation](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-nim/sympy__sympy-14711/validation.log) |
+| Nemotron 3 Ultra 550B / NVIDIA NIM | X | Yes | 14 | 14 | 47,249 | 1,793 | 197.47 s | [JSON](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-nim/pydata__xarray-4629/solution.json) / [validation](benchmark_traces/runs/nvidia-nemotron-3-ultra-550b-a55b-nim/pydata__xarray-4629/validation.log) |
 | DeepSeek V4 Flash / OpenRouter | S1 | No | 27 | 27 | 68,834 | 10,000 | 338.39 s | [JSON](benchmark_traces/runs/deepseek-v4-flash-0731-free/sympy__sympy-13480/solution.json) / [validation](benchmark_traces/runs/deepseek-v4-flash-0731-free/sympy__sympy-13480/validation.log) |
 | DeepSeek V4 Flash / OpenRouter | S2 | No | 30 | 30 | 95,822 | 7,273 | 236.30 s | [JSON](benchmark_traces/runs/deepseek-v4-flash-0731-free/sympy__sympy-14711/solution.json) / [validation](benchmark_traces/runs/deepseek-v4-flash-0731-free/sympy__sympy-14711/validation.log) |
 | DeepSeek V4 Flash / OpenRouter | X | Yes | 7 | 7 | 23,992 | 1,035 | 41.82 s | [JSON](benchmark_traces/runs/deepseek-v4-flash-0731-free/pydata__xarray-4629/solution.json) / [validation](benchmark_traces/runs/deepseek-v4-flash-0731-free/pydata__xarray-4629/validation.log) |
-| Laguna S 2.1 / OpenRouter | S1 | No | 1 | 6 | 0 | 0 | 43.31 s | [JSON](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-13480/solution.json) / [validation](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-13480/validation.log) |
-| Laguna S 2.1 / OpenRouter | S2 | No | 1 | 6 | 0 | 0 | 42.65 s | [JSON](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-14711/solution.json) / [validation](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-14711/validation.log) |
-| Laguna S 2.1 / OpenRouter | X | No | 1 | 6 | 0 | 0 | 43.00 s | [JSON](benchmark_traces/runs/poolside-laguna-s-2.1-free/pydata__xarray-4629/solution.json) / [validation](benchmark_traces/runs/poolside-laguna-s-2.1-free/pydata__xarray-4629/validation.log) |
+| Laguna S 2.1 / OpenRouter | S1 | Yes | 11 | 19 | 25,305 | 611 | 138.57 s | [JSON](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-13480/solution.json) / [validation](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-13480/validation.log) |
+| Laguna S 2.1 / OpenRouter | S2 | No | 30 | 56 | 93,025 | 4,011 | 395.96 s | [JSON](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-14711/solution.json) / [validation](benchmark_traces/runs/poolside-laguna-s-2.1-free/sympy__sympy-14711/validation.log) |
+| Laguna S 2.1 / OpenRouter | X | Yes | 24 | 35 | 71,416 | 3,208 | 281.15 s | [JSON](benchmark_traces/runs/poolside-laguna-s-2.1-free/pydata__xarray-4629/solution.json) / [validation](benchmark_traces/runs/poolside-laguna-s-2.1-free/pydata__xarray-4629/validation.log) |
 
-Qwen is the only model meeting the examination solve threshold on this cohort:
-2/3 externally valid patches. GPT-OSS and DeepSeek each solved 1/3. Nemotron
-and Laguna could not produce a response because of the shared OpenRouter quota.
+Qwen and Laguna meet the examination solve threshold on this cohort with 2/3
+externally valid patches. GPT-OSS, Nemotron, and DeepSeek each solved 1/3.
 
 ## Provider reliability
 
@@ -81,17 +86,16 @@ time remains visible in each `solution.json`.
 |---|---:|---:|---|---:|---:|
 | Qwen 3.8-27B / Groq | 41 / 42 | 1 | None | 21.51 s | 97.6% |
 | GPT-OSS 120B / Groq | 12 / 14 | 0 | 2 HTTP 400 protocol errors | 15.73 s | 85.7% |
-| Nemotron 3 Ultra / OpenRouter | 0 / 18 | 15 | 3 HTTP 429 quota errors | Not measurable | 0% |
+| Nemotron 3 Ultra / NVIDIA NIM | 74 / 74 | 0 | None | 15.23 s | 100% |
 | DeepSeek V4 Flash / OpenRouter | 64 / 64 | 0 | None | 9.35 s | 100% |
-| Laguna S 2.1 / OpenRouter | 0 / 18 | 15 | 3 HTTP 429 quota errors | Not measurable | 0% |
+| Laguna S 2.1 / OpenRouter | 65 / 110 | 45 | None | 10.82 s | 59.1% |
 
 GPT-OSS failed when Groq rejected model-generated native tool calls with
-`Tool choice is none, but model called a tool`. Nemotron and Laguna exhausted
-all five configured retries on every task. OpenRouter reported a free-tier
-daily limit of 50 requests and zero remaining requests, with reset scheduled
-for 2026-09-20 02:00 CEST. DeepSeek remained available through the same key,
-which indicates model-route-specific availability rather than a total endpoint
-outage.
+`Tool choice is none, but model called a tool`. Direct NVIDIA NIM returned
+usage metrics on every Nemotron response and needed no retry. Laguna eventually
+completed all three runs, but 45 of 110 HTTP attempts were retries after
+OpenRouter or its upstream provider returned rate-limit errors. DeepSeek had no
+provider error; its S1 run stopped on the agent's output-token budget.
 
 ## Intermediary agent metrics
 
@@ -106,6 +110,9 @@ observed passing test step.
 | Focused / Qwen | X | 1 | 2 | 6 | 7 | 1 |
 | Focused / GPT-OSS | X | 8 | 9 | Not run | 10 | N/A |
 | Focused / DeepSeek | X | 2 | 3 | 4 | 7 | 3 |
+| Focused / Nemotron | X | 1 | 3 | 12 | 14 | 2 |
+| Focused / Laguna | S1 | 3 | 6 | 7 | 11 | 4 |
+| Focused / Laguna | X | 5 | 15 | 21 | 24 | 3 |
 | Generic / Qwen | S1 | 1 | 11 | 19 | 22 | 3 |
 
 The GPT-OSS patch passed external validation without the agent running tests.
@@ -137,9 +144,10 @@ and exploration efficiency on this cohort.
 
 ## Conclusions
 
-Qwen 3.8-27B on Groq is the selected default for the final pipeline. It is the
-only tested configuration that reached the required 2/3 solve threshold, and
-its focused prompt was materially better than the generic ablation.
+Qwen 3.8-27B on Groq remains the selected default for the final pipeline. It
+reached the required 2/3 solve threshold with far fewer iterations and HTTP
+retries than Laguna, and its focused prompt was materially better than the
+generic ablation.
 
 DeepSeek V4 Flash is the strongest fallback from a provider perspective: it had
 100% observed API availability and the lowest mean response time, but solved
@@ -147,8 +155,9 @@ only 1/3 and exhausted the output-token budget on S1. GPT-OSS 120B also solved
 1/3, but its native-tool-call incompatibility makes it less reliable with the
 current client protocol.
 
-Nemotron 3 Ultra and Laguna S 2.1 should be excluded operationally with the
-currently supplied OpenRouter free-tier key because they were completely
-unavailable during the benchmark. This result is not evidence about their
-underlying coding quality; a fair model-quality comparison requires rerunning
-their three saved tasks after the quota reset.
+Laguna S 2.1 also reached 2/3, but its native tool-call formatting caused many
+invalid responses and its OpenRouter route required 45 retries. Nemotron's
+direct NVIDIA endpoint was fully available and solved 1/3; on both SymPy tasks
+it found useful changes but exhausted all 30 iterations without submitting a
+patch. Nemotron is therefore technically usable through NVIDIA NIM, but it is
+not a reliable default for this agent protocol.
