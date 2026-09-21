@@ -84,7 +84,7 @@ The agent starts with a benchmark-specific system prompt, the task, and a manual
 5. capture stdout, stderr, errors and a possible `final_answer`;
 6. append the observation to the conversation and continue.
 
-The loop stops when the model calls `final_answer`, reaches the iteration or token budget, or encounters an unrecoverable sandbox error. Conversation history and large observations are truncated to control cumulative token usage, with an explicit message telling the model what was removed.
+The loop stops when the model calls `final_answer`, reaches the iteration or token budget, reaches the internal task deadline, or encounters an unrecoverable sandbox error. The MBPP and SWE-bench CLIs use respective internal deadlines of 115 and 880 seconds, leaving cleanup time before the official 120- and 900-second limits. Conversation history and large observations are truncated to control cumulative token usage, with an explicit message telling the model what was removed.
 
 For MBPP, the final answer is the complete Python solution. For SWE-bench, it must be a unified Git diff returned by `get_patch()`.
 

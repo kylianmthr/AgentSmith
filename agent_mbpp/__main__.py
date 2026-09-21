@@ -4,12 +4,14 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from agent_smith.agent.deadline import TaskDeadline, TaskDeadlineExceeded
 from agent_smith.agent.loop import Agent
 from agent_smith.models.task_input import MBPPTaskInput
 from agent_smith.sandbox.manager import SandboxManager
 
 MAX_INPUT_TOKENS = 5_000
 MAX_OUTPUT_TOKENS = 1_200
+TASK_TIMEOUT_SECONDS = 115
 
 
 def _error_summary(error: Exception) -> str:
@@ -117,7 +119,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     manager = None
+    deadline = TaskDeadline(TASK_TIMEOUT_SECONDS)
     try:
+        deadline.start()
         task_path = Path(args.task_file)
         sandbox_config_path = Path(args.sandbox_config) if args.sandbox_config else None
         with open(task_path, "r") as f:
@@ -163,9 +167,13 @@ if __name__ == "__main__":
                 history_window=4,
             )
             res = agent.execute()
+            deadline.cancel()
             path = Path(args.output_file)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(res.model_dump_json(indent=4))
+    except TaskDeadlineExceeded as error:
+        print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(124)
     except KeyboardInterrupt:
         print("Interrupted.", file=sys.stderr)
         raise SystemExit(130)
@@ -173,5 +181,6 @@ if __name__ == "__main__":
         print(f"Error: {_error_summary(error)}", file=sys.stderr)
         raise SystemExit(1)
     finally:
+        deadline.cancel()
         if manager is not None:
             manager.stop()

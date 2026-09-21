@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from agent_smith.agent.deadline import TaskDeadline, TaskDeadlineExceeded
 from agent_smith.agent.loop import Agent
 from agent_smith.models.task_input import SWEBenchTaskInput
 from agent_smith.sandbox.manager import SandboxManager
@@ -11,6 +12,7 @@ from agent_smith.sandbox.manager import SandboxManager
 # Official SWE-bench limits (subject VI.1.2), cumulative over the whole task.
 MAX_INPUT_TOKENS = 300_000
 MAX_OUTPUT_TOKENS = 10_000
+TASK_TIMEOUT_SECONDS = 880
 
 
 def _error_summary(error: Exception) -> str:
@@ -123,7 +125,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     manager = None
+    deadline = TaskDeadline(TASK_TIMEOUT_SECONDS)
     try:
+        deadline.start()
         task_path = Path(args.task_file)
         sandbox_config_path = (
             Path(args.sandbox_config) if args.sandbox_config else None
@@ -165,9 +169,13 @@ if __name__ == "__main__":
                 history_window=8,
             )
             res = agent.execute()
+            deadline.cancel()
             path = Path(args.output)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(res.model_dump_json(indent=4))
+    except TaskDeadlineExceeded as error:
+        print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(124)
     except KeyboardInterrupt:
         print("Interrupted.", file=sys.stderr)
         raise SystemExit(130)
@@ -175,5 +183,6 @@ if __name__ == "__main__":
         print(f"Error: {_error_summary(error)}", file=sys.stderr)
         raise SystemExit(1)
     finally:
+        deadline.cancel()
         if manager is not None:
             manager.stop()

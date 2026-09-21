@@ -1,4 +1,5 @@
 from openai.types.chat import ChatCompletionMessageParam
+from agent_smith.agent.deadline import TaskDeadlineExceeded
 from agent_smith.agent.env_loader import DotEnvLoader
 from agent_smith.sandbox.manager import SandboxManager
 from agent_smith.llm.client import Client
@@ -271,6 +272,8 @@ class Agent:
                 i += 1
                 print("=== Observation ===")
                 print(observation)
+        except TaskDeadlineExceeded:
+            raise
         except Exception as e:
             self.result.error = str(e)
         finally:

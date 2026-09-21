@@ -1,6 +1,7 @@
 import pytest
 
 from agent_smith.agent import loop as loop_module
+from agent_smith.agent.deadline import TaskDeadlineExceeded
 from agent_smith.agent.loop import Agent
 from agent_smith.llm.response import LLMResponse
 from agent_smith.models.result import SandboxResult
@@ -130,4 +131,24 @@ def test_execute_counts_attempts_when_all_retries_fail(monkeypatch) -> None:
     assert result.success is False
     assert result.error == "provider unavailable"
     assert result.total_requests == 4
+    assert sandbox.stopped is True
+
+
+class FakeDeadlineClient:
+    def __init__(self, **_kwargs) -> None:
+        self.total_requests = 0
+
+    def generate(self, conversation) -> LLMResponse:
+        self.total_requests += 1
+        raise TaskDeadlineExceeded("task deadline expired")
+
+
+def test_execute_propagates_task_deadline_and_stops_sandbox(monkeypatch) -> None:
+    sandbox = FakeSandbox(SandboxResult())
+    monkeypatch.setattr(loop_module, "DotEnvLoader", FakeDotEnvLoader)
+    monkeypatch.setattr(loop_module, "Client", FakeDeadlineClient)
+
+    with pytest.raises(TaskDeadlineExceeded, match="task deadline expired"):
+        make_agent(sandbox).execute()
+
     assert sandbox.stopped is True
