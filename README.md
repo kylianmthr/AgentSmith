@@ -84,7 +84,7 @@ The agent starts with a benchmark-specific system prompt, the task, and a manual
 5. capture stdout, stderr, errors and a possible `final_answer`;
 6. append the observation to the conversation and continue.
 
-The loop stops when the model calls `final_answer`, reaches the iteration or token budget, or encounters an unrecoverable sandbox error. Conversation history and large observations are truncated to control cumulative token usage, with an explicit message telling the model what was removed.
+The loop stops when the model calls `final_answer`, reaches the iteration or token budget, reaches the internal task deadline, or encounters an unrecoverable sandbox error. The MBPP and SWE-bench CLIs use respective internal deadlines of 115 and 880 seconds, leaving cleanup time before the official 120- and 900-second limits. Conversation history and large observations are truncated to control cumulative token usage, with an explicit message telling the model what was removed.
 
 For MBPP, the final answer is the complete Python solution. For SWE-bench, it must be a unified Git diff returned by `get_patch()`.
 
@@ -230,7 +230,7 @@ API secrets must stay in `.env`, which is ignored by Git. Never commit real keys
 
 The canonical model comparison belongs in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md), backed by committed `solution.json` traces. The required experiment compares at least five models on the same three or more SWE-bench tasks and records pass/fail, iterations, input/output tokens, wall time, provider reliability, at least two intermediary exploration metrics, and an ablation study.
 
-Measured benchmark data has not yet been added to this repository. This section and `BENCHMARK_REPORT.md` must be updated from real runs before project submission; results must not be estimated or fabricated.
+`BENCHMARK_REPORT.md` contains complete runs of five models on the same three SWE-bench tasks, external validation of submitted patches, and a controlled prompt ablation, all backed by committed `solution.json` traces.
 
 ## Resources
 

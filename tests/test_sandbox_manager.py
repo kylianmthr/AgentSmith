@@ -7,6 +7,7 @@ import pytest
 from agent_smith.models.sandbox_config import SandboxConfig
 from agent_smith.sandbox import manager as manager_module
 from agent_smith.sandbox.manager import SandboxManager, SandboxManagerError
+from agent_smith.sandbox.worker import SandboxWorker, worker_entrypoint
 from agent_smith.sandbox.config_validator import (
     SandboxConfigError,
     SandboxConfigValidator,
@@ -187,6 +188,102 @@ def test_manager_consumes_ready_before_first_run_result(
     }
 
 
+@pytest.mark.parametrize(
+    "message, exception_type, expected_code",
+    [
+        (
+            {"type": "control_flow", "exception": "KeyboardInterrupt"},
+            KeyboardInterrupt,
+            None,
+        ),
+        (
+            {"type": "control_flow", "exception": "SystemExit", "code": 7},
+            SystemExit,
+            7,
+        ),
+    ],
+)
+def test_manager_propagates_worker_control_flow(
+    message: dict,
+    exception_type: type[BaseException],
+    expected_code: int | None,
+) -> None:
+    with pytest.raises(exception_type) as caught:
+        SandboxManager._raise_control_flow(message)
+
+    if exception_type is SystemExit:
+        assert caught.value.code == expected_code
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [KeyboardInterrupt(), SystemExit(9)],
+)
+def test_worker_reports_control_flow_before_reraising(
+    monkeypatch: pytest.MonkeyPatch,
+    exception: BaseException,
+) -> None:
+    input_queue = Queue()
+    output_queue = Queue()
+    worker = SandboxWorker(
+        input_queue=input_queue,
+        output_queue=output_queue,
+        authorized_imports=[],
+        allowed_directories=["/tmp"],
+        max_memory_mb=128,
+        max_execution_time_seconds=1,
+    )
+
+    def interrupt(_python_code: str) -> None:
+        raise exception
+
+    monkeypatch.setattr(worker, "exec_with_timeout", interrupt)
+
+    with pytest.raises(type(exception)):
+        worker.handle_run("print('before interrupt')")
+
+    message = output_queue.get(timeout=1)
+    assert message["type"] == "control_flow"
+    assert message["exception"] == type(exception).__name__
+    assert message["code"] == getattr(exception, "code", None)
+
+
+@pytest.mark.parametrize("exception", [KeyboardInterrupt(), SystemExit(4)])
+def test_worker_entrypoint_stops_control_flow_after_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    exception: BaseException,
+) -> None:
+    cleanup_calls = []
+
+    class InterruptingWorker:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def loop(self) -> None:
+            raise exception
+
+        def cleanup(self) -> None:
+            cleanup_calls.append(True)
+
+    monkeypatch.setattr(
+        "agent_smith.sandbox.worker.SandboxWorker", InterruptingWorker
+    )
+
+    worker_entrypoint(
+        Queue(),
+        Queue(),
+        authorized_imports=[],
+        allowed_directories=["/tmp"],
+        max_memory_mb=128,
+        max_execution_time_seconds=1,
+    )
+
+    assert cleanup_calls == [True]
+
+
 def test_real_worker_completes_ready_handshake() -> None:
     manager = SandboxManager(None)
 
@@ -198,6 +295,83 @@ def test_real_worker_completes_ready_handshake() -> None:
 
     assert result.success is True
     assert result.stdout == "ready\n"
+
+
+def test_real_worker_allows_file_access_inside_allowed_directory(
+    tmp_path: Path,
+) -> None:
+    allowed_directory = tmp_path / "allowed"
+    allowed_directory.mkdir()
+    config_path = tmp_path / "sandbox.json"
+    config_path.write_text(
+        json.dumps({"allowed_directories": [str(allowed_directory)]}),
+        encoding="utf-8",
+    )
+    target = allowed_directory / "result.txt"
+    manager = SandboxManager(config_path)
+
+    try:
+        result = manager.run(
+            f"handle = open({str(target)!r}, 'w')\n"
+            "handle.write('sandboxed')\n"
+            "handle.close()\n"
+            f"print(open({str(target)!r}).read())"
+        )
+    finally:
+        manager.stop()
+
+    assert result.success is True
+    assert result.stdout == "sandboxed\n"
+    assert target.read_text(encoding="utf-8") == "sandboxed"
+
+
+def test_real_worker_rejects_file_access_outside_allowed_directory(
+    tmp_path: Path,
+) -> None:
+    allowed_directory = tmp_path / "allowed"
+    allowed_directory.mkdir()
+    config_path = tmp_path / "sandbox.json"
+    config_path.write_text(
+        json.dumps({"allowed_directories": [str(allowed_directory)]}),
+        encoding="utf-8",
+    )
+    outside_target = tmp_path / "outside.txt"
+    manager = SandboxManager(config_path)
+
+    try:
+        result = manager.run(f"open({str(outside_target)!r}, 'w')")
+    finally:
+        manager.stop()
+
+    assert result.success is False
+    assert result.error is not None
+    assert "File access outside allowed directories" in result.error
+    assert not outside_target.exists()
+
+
+@pytest.mark.parametrize(
+    "python_code, error_text",
+    [
+        ("import os", "Unauthorized import: os"),
+        ("eval('1 + 1')", "name 'eval' is not defined"),
+        ("exec('print(1)')", "name 'exec' is not defined"),
+        ("__import__('os')", "Dynamic imports are forbidden"),
+    ],
+)
+def test_real_worker_enforces_runtime_restrictions(
+    python_code: str,
+    error_text: str,
+) -> None:
+    manager = SandboxManager(None)
+
+    try:
+        result = manager.run(python_code)
+    finally:
+        manager.stop()
+
+    assert result.success is False
+    assert result.error is not None
+    assert error_text in result.error
 
 
 def test_manager_rejects_worker_startup_error(

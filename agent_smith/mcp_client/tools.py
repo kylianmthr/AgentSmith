@@ -13,17 +13,23 @@ PATH_ARGUMENT_NAMES = {
 }
 
 class ToolsHandle:
+    """Discover MCP tools and expose validated Python wrappers."""
+
     def __init__(
             self,
             portal: BlockingPortal,
             session: ClientSession,
             allowed_directories: list[str],
         ) -> None:
+        """Store the MCP session and filesystem restrictions."""
+
         self.portal = portal
         self.session = session
         self.allowed_directories = allowed_directories
 
     def list_tools(self, mode: str = "name") -> list[Any]:
+        """List tools as names, prompt documentation, or schemas."""
+
         result = self.portal.call(self.session.list_tools)
         if mode == "name":
             return [tool.name for tool in result.tools]
@@ -85,6 +91,8 @@ class ToolsHandle:
         return wrappers
 
     def validate_allowed_filepath(self, filepath: str) -> None:
+        """Reject paths outside the configured directories."""
+
         if not isinstance(filepath, str):
             raise TypeError("filepath must be a string")
         path = Path(filepath)
@@ -106,7 +114,11 @@ class ToolsHandle:
         )
 
     def create_single_wrapper(self, tool: Any) -> Callable:
+        """Create a synchronous, path-validating wrapper for one tool."""
+
         def wrapper(*args, **kwargs):
+            """Validate arguments and invoke the wrapped MCP tool."""
+
             properties = tool.inputSchema.get("properties", {})
             names = [name for name in properties]
             named_args = {}

@@ -3,11 +3,17 @@ from agent_smith.models.sandbox_config import SandboxConfig
 from pathlib import Path
 
 class SandboxConfigError(Exception):
+    """Report an unreadable or invalid sandbox configuration."""
+
     pass
 
 class SandboxConfigValidator:
+    """Load and validate sandbox configuration files."""
+
     @staticmethod
     def load(config_path: Path | None) -> SandboxConfig:
+        """Return defaults or a validated JSON configuration."""
+
         if config_path is None:
             return SandboxConfig()
 

@@ -130,7 +130,36 @@ def test_start_http_server_rejects_url_without_port() -> None:
         handle.start_http_server()
 
 
-def test_handle_http_without_autostart_args_fails_cleanly(
+def test_handle_http_without_autostart_args_waits_for_external_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handle = HttpHandle(
+        portal=None,
+        config={
+            "transport": "http",
+            "url": "http://127.0.0.1:9012/mcp",
+            "args": [],
+        },
+    )
+    calls = {"connect": 0, "wait": 0}
+
+    def fake_connect_http():
+        calls["connect"] += 1
+        return "read_stream", "write_stream"
+
+    def fake_wait_for_server():
+        calls["wait"] += 1
+
+    monkeypatch.setattr(handle, "is_server_reachable", lambda: False)
+    monkeypatch.setattr(handle, "connect_http", fake_connect_http)
+    monkeypatch.setattr(handle, "wait_for_server", fake_wait_for_server)
+
+    assert handle.handle_http() == ("read_stream", "write_stream")
+    assert calls == {"connect": 1, "wait": 1}
+    assert handle.http_launched is False
+
+
+def test_handle_http_without_autostart_args_reports_unreachable_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     handle = HttpHandle(
@@ -147,10 +176,14 @@ def test_handle_http_without_autostart_args_fails_cleanly(
         calls["connect"] += 1
         return "read_stream", "write_stream"
 
+    def fake_wait_for_server():
+        raise HttpHandleErr("HTTP MCP server did not become reachable")
+
     monkeypatch.setattr(handle, "is_server_reachable", lambda: False)
     monkeypatch.setattr(handle, "connect_http", fake_connect_http)
+    monkeypatch.setattr(handle, "wait_for_server", fake_wait_for_server)
 
-    with pytest.raises(HttpHandleErr, match="missing args"):
+    with pytest.raises(HttpHandleErr, match="did not become reachable"):
         handle.handle_http()
 
     assert calls["connect"] == 0

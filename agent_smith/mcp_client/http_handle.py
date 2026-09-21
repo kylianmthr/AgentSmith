@@ -8,10 +8,16 @@ from urllib.parse import urlparse
 from mcp.client.streamable_http import streamable_http_client
 
 class HttpHandleErr(Exception):
+    """Report an HTTP MCP transport failure."""
+
     pass
 
 class HttpHandle:
+    """Connect to or launch a streamable HTTP MCP server."""
+
     def __init__(self, portal: BlockingPortal, config: dict[str, Any]) -> None:
+        """Store the portal and HTTP transport configuration."""
+
         self.portal = portal
         self.config = config
         self.http_context = None
@@ -20,23 +26,27 @@ class HttpHandle:
 
 
     def handle_http(self) -> tuple[Any, Any]:
-        if self.is_server_reachable():
-            return self.connect_http()
-        if not self.config.get("args"):
-            raise HttpHandleErr("Couldn't connect to http server (missing args)")
-        self.start_http_server()
-        self.http_launched = True
-        self.wait_for_server()
+        """Return streams for a reachable HTTP MCP server."""
+
+        if not self.is_server_reachable():
+            if self.config.get("args"):
+                self.start_http_server()
+                self.http_launched = True
+            self.wait_for_server()
         return self.connect_http()
 
     def wait_for_server(self) -> None:
+        """Wait briefly for an MCP HTTP server to accept connections."""
+
         for _ in range(20):
             if self.is_server_reachable():
                 return
             time.sleep(0.25)
-        raise HttpHandleErr("HTTP MCP server did not start")
+        raise HttpHandleErr("HTTP MCP server did not become reachable")
 
     def is_server_reachable(self) -> bool:
+        """Return whether the configured server socket is reachable."""
+
         parsed = urlparse(self.config["url"])
         if not parsed.hostname:
             return False
@@ -52,6 +62,8 @@ class HttpHandle:
             return False
 
     def connect_http(self):
+        """Open a streamable HTTP client context."""
+
         url = self.config.get("url")
         if not url:
             raise HttpHandleErr("Missing URL")
@@ -69,6 +81,8 @@ class HttpHandle:
         return read_stream, write_stream
 
     def start_http_server(self) -> None:
+        """Launch the configured MCP server as a child process."""
+
         parsed = urlparse(self.config["url"])
         if not parsed.hostname:
             raise HttpHandleErr("HTTP URL must include a hostname")
@@ -99,6 +113,8 @@ class HttpHandle:
         )
         
     def stop(self) -> None:
+        """Close the client context and any managed server process."""
+
         if self.http_context is not None:
             self.http_context.__exit__(None, None, None)
             self.http_context = None

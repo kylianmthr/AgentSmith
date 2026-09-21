@@ -119,10 +119,10 @@ class TestLastLine:
 
 class TestRunTestsSansTache:
     def test_no_task_loaded(self):
-        assert srv.run_tests(GOOD_SOLUTION) == "ERROR: No tasks loaded"
+        assert srv.run_tests(GOOD_SOLUTION) == "ERROR: No tests provided"
 
     def test_empty_code(self):
-        assert srv.run_tests("") == "ERROR: No tasks loaded"
+        assert srv.run_tests("") == "ERROR: No tests provided"
 
 
 class TestRunTests:

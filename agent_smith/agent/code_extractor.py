@@ -7,7 +7,11 @@ import json
 
 
 class JSONMalformed(ValueError):
+    """Report an invalid JSON tool call."""
+
     def __init__(self, message):
+        """Initialize the error with its parser message."""
+
         super().__init__(message)
         self.message = message
 
@@ -61,7 +65,11 @@ BARE_CODE_INTERPRETED = (
 
 
 class CodeExtractor:
+    """Extract executable Python from supported LLM response formats."""
+
     def __init__(self) -> None:
+        """Register primary extractors and fallback salvagers."""
+
         self.extractors: list[Extractor] = [
             PythonExtractor(),
             FunctionTagExtractor(),
@@ -75,6 +83,8 @@ class CodeExtractor:
         ]
 
     def extract(self, llm_output: str) -> ExtractedCode:
+        """Return executable code or explicit extraction feedback."""
+
         for extractor in self.extractors:
             try:
                 return ExtractedCode(code=extractor.extract(llm_output))
@@ -92,6 +102,8 @@ class CodeExtractor:
 
     @staticmethod
     def is_parsable(code: str) -> bool:
+        """Return whether code is valid Python syntax."""
+
         try:
             ast.parse(code)
         except (SyntaxError, ValueError):
@@ -100,11 +112,17 @@ class CodeExtractor:
 
 
 class Extractor(ABC):
+    """Define the interface shared by response extractors."""
+
     @abstractmethod
     def extract(self, prompt: str) -> str:
+        """Extract executable Python from a model response."""
+
         pass
 
     def transform(self, raw: str):
+        """Decode a serialized argument when possible."""
+
         raw = html.unescape(raw).strip()
         try:
             return ast.literal_eval(raw)
@@ -113,7 +131,11 @@ class Extractor(ABC):
 
 
 class PythonExtractor(Extractor):
+    """Extract code from a fenced Python block."""
+
     def extract(self, prompt: str) -> str:
+        """Return the first fenced Python block."""
+
         pattern = r"```(?:python)?\n?(.*?)\n?```"
         match = re.search(pattern, prompt, re.DOTALL)
 
@@ -125,6 +147,8 @@ class PythonExtractor(Extractor):
 
 
 class XMLExtractor(Extractor):
+    """Translate Anthropic-style XML calls into Python."""
+
     INVOKE_RE = re.compile(
         r'<invoke name="(?P<name>[^"]+)">(?P<content>.*?)</invoke>', re.DOTALL
     )
@@ -134,6 +158,8 @@ class XMLExtractor(Extractor):
     )
 
     def extract(self, prompt: str) -> str:
+        """Return Python for the first XML tool invocation."""
+
         match = self.INVOKE_RE.search(prompt)
         if not match:
             raise ValueError("No XML code block was found")
@@ -147,7 +173,11 @@ class XMLExtractor(Extractor):
 
 
 class JSONExtractor:
+    """Parse a JSON tool call payload."""
+
     def extract(self, prompt: str) -> dict:
+        """Decode a JSON object or raise a contextual error."""
+
         try:
             call = json.loads(prompt)
             return call
@@ -156,11 +186,15 @@ class JSONExtractor:
 
 
 class HermesExctractor(Extractor):
+    """Translate Hermes JSON tool-call tags into Python."""
+
     TOOL_CALL_RE = re.compile(
         r"<tool_call>\s*(?P<json>\{.*?\})\s*</tool_call>", re.DOTALL
     )
 
     def extract(self, prompt: str) -> str:
+        """Return Python for the first Hermes tool call."""
+
         match = self.TOOL_CALL_RE.search(prompt)
         if not match:
             raise ValueError("No JSON tool call was found")
@@ -172,7 +206,11 @@ class HermesExctractor(Extractor):
 
 
 class ReActExtractor(Extractor):
+    """Translate a ReAct action into a Python call."""
+
     def extract(self, prompt: str) -> str:
+        """Extract a ReAct action and optional input."""
+
         pattern = (
             r"Action:\s*(?P<name>\S+)(?:\s*Action Input:\s*(?P<input>.*))?"
         )
@@ -199,6 +237,8 @@ class TruncatedPythonExtractor(Extractor):
     OPEN_RE = re.compile(r"```(?:python)?\n(?P<code>.*)\Z", re.DOTALL)
 
     def extract(self, prompt: str) -> str:
+        """Return code from an unterminated fenced block."""
+
         match = self.OPEN_RE.search(prompt)
         if not match:
             raise ValueError("No unterminated python code block was found")
@@ -212,6 +252,8 @@ class BareCodeExtractor(Extractor):
     """Last resort: the whole answer is Python with no fence at all."""
 
     def extract(self, prompt: str) -> str:
+        """Accept a whole response that parses as actionable Python."""
+
         code = prompt.strip()
         if not code:
             raise ValueError("Empty response")
@@ -240,6 +282,8 @@ class FunctionTagExtractor(Extractor):
     )
 
     def extract(self, prompt: str) -> str:
+        """Return Python for the first Qwen-style function tag."""
+
         match = self.FUNCTION_RE.search(prompt)
         if not match:
             raise ValueError("No <function=...> tool call was found")

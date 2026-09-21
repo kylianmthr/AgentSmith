@@ -1,0 +1,7 @@
+provider=groq
+api_url=https://api.groq.com/openai/v1
+model=openai/gpt-oss-120b
+task_id=sympy__sympy-14711
+agent_exit=0
+agent_wall_seconds=10
+validation_exit=1

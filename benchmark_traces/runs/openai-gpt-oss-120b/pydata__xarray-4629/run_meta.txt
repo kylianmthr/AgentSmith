@@ -1,0 +1,7 @@
+provider=groq
+api_url=https://api.groq.com/openai/v1
+model=openai/gpt-oss-120b
+task_id=pydata__xarray-4629
+agent_exit=0
+agent_wall_seconds=186
+validation_exit=0

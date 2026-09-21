@@ -1,4 +1,5 @@
 from openai.types.chat import ChatCompletionMessageParam
+from agent_smith.agent.deadline import TaskDeadlineExceeded
 from agent_smith.agent.env_loader import DotEnvLoader
 from agent_smith.sandbox.manager import SandboxManager
 from agent_smith.llm.client import Client
@@ -11,6 +12,8 @@ PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
 
 
 class Agent:
+    """Run the iterative LLM, extraction, and sandbox workflow."""
+
     def __init__(
         self,
         sandbox: SandboxManager,
@@ -27,6 +30,8 @@ class Agent:
         max_observation_chars: int = 4000,
         history_window: int = 8,
     ) -> None:
+        """Configure the agent and initialize its result record."""
+
         self.sandbox = sandbox
         self.sys_prompt = sys_prompt
         self.task = task
@@ -54,6 +59,8 @@ class Agent:
         )
 
     def truncate_observation(self, text: str) -> str:
+        """Limit an observation while explaining any truncation."""
+
         if len(text) <= self.max_observation_chars:
             return text
         dropped = len(text) - self.max_observation_chars
@@ -64,6 +71,8 @@ class Agent:
         )
 
     def build_observation(self, sandbox_res, warning: str | None) -> str:
+        """Build feedback for the next model iteration."""
+
         parts = []
         if warning:
             parts.append(f"warning: {warning}")
@@ -122,6 +131,8 @@ class Agent:
         )
 
     def budget_exceeded(self) -> str | None:
+        """Describe an exhausted cumulative token budget."""
+
         if self.result.total_input_tokens >= self.max_input_tokens:
             return (
                 f"Input token budget exhausted "
@@ -134,7 +145,26 @@ class Agent:
             )
         return None
 
+    @staticmethod
+    def format_sandbox_log(sandbox_res) -> str:
+        """Serialize every sandbox result field used by the metrics schema."""
+
+        return (
+            "[STDOUT]\n"
+            f"{sandbox_res.stdout}\n"
+            "[STDERR]\n"
+            f"{sandbox_res.stderr}\n"
+            "[ERROR]\n"
+            f"{sandbox_res.error!r}\n"
+            "[FINAL_ANSWER]\n"
+            f"{sandbox_res.final_answer!r}\n"
+            "[SUCCESS]\n"
+            f"{sandbox_res.success}"
+        )
+
     def execute(self):
+        """Execute the agent loop and return its structured result."""
+
         history: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": self.sys_prompt},
             {"role": "user", "content": self.task},
@@ -142,6 +172,7 @@ class Agent:
         dotenv = DotEnvLoader()
         dotenv.load()
         start_time = time.time()
+        client = None
         try:
             if not dotenv.api_key:
                 raise ValueError("API Key not defined.")
@@ -158,10 +189,21 @@ class Agent:
                 if exhausted:
                     self.result.error = exhausted
                     break
+                remaining_output_tokens = (
+                    self.max_output_tokens - self.result.total_output_tokens
+                )
+                client.max_tokens = min(
+                    self.max_tokens,
+                    remaining_output_tokens,
+                )
                 history = self.trim_history(history)
                 self.result.iterations += 1
                 res = client.generate(conversation=history)
-                self.result.total_requests += 1
+                self.result.total_requests = getattr(
+                    client,
+                    "total_requests",
+                    self.result.total_requests + 1 + res.retries,
+                )
                 self.result.total_input_tokens += res.input_tokens
                 self.result.total_output_tokens += res.output_tokens
                 print(f"=== LLM output (step {i + 1}) ===")
@@ -207,7 +249,7 @@ class Agent:
                         model_name=self.model_name,
                         llm_output=res.llm_output,
                         sandbox_input=extracted.code,
-                        sandbox_output=sandbox_res.stdout,
+                        sandbox_output=self.format_sandbox_log(sandbox_res),
                         retries=res.retries,
                     )
                 )
@@ -230,8 +272,15 @@ class Agent:
                 i += 1
                 print("=== Observation ===")
                 print(observation)
+        except TaskDeadlineExceeded:
+            raise
         except Exception as e:
             self.result.error = str(e)
-        self.result.total_time_seconds = time.time() - start_time
-        self.sandbox.stop()
+        finally:
+            self.result.total_requests = max(
+                self.result.total_requests,
+                getattr(client, "total_requests", 0),
+            )
+            self.result.total_time_seconds = time.time() - start_time
+            self.sandbox.stop()
         return self.result

@@ -1,0 +1,7 @@
+provider=nvidia-nim
+api_url=https://integrate.api.nvidia.com/v1
+model=nvidia/nemotron-3-ultra-550b-a55b
+task_id=sympy__sympy-14711
+agent_exit=0
+agent_wall_seconds=622
+validation_exit=1

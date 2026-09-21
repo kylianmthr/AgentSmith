@@ -6,9 +6,10 @@ from pydantic import ValidationError
 from agent_smith.models.mcp_config import SandboxMCPConfig
 
 
-def test_stdio_config_requires_args() -> None:
-    with pytest.raises(ValidationError, match="Args are required"):
-        SandboxMCPConfig(transport="stdio", command="python3", args=[])
+def test_stdio_config_accepts_command_without_args() -> None:
+    config = SandboxMCPConfig(transport="stdio", command="mcp-server")
+
+    assert config.args == []
 
 
 def test_stdio_config_accepts_command_args_and_cwd(tmp_path: Path) -> None:

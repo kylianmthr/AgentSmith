@@ -2,12 +2,74 @@ import argparse
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from agent_smith.agent.deadline import TaskDeadline, TaskDeadlineExceeded
 from agent_smith.agent.loop import Agent
 from agent_smith.models.task_input import MBPPTaskInput
 from agent_smith.sandbox.manager import SandboxManager
 
-MAX_INPUT_TOKENS = 6_000
-MAX_OUTPUT_TOKENS = 1_500
+MAX_INPUT_TOKENS = 5_000
+MAX_OUTPUT_TOKENS = 1_200
+TASK_TIMEOUT_SECONDS = 115
+
+
+def _error_summary(error: Exception) -> str:
+    """Return one concise line for a command-line error."""
+
+    if isinstance(error, ValidationError):
+        issue = error.errors(include_url=False)[0]
+        location = ".".join(str(part) for part in issue["loc"])
+        prefix = f"{location}: " if location else ""
+        return f"invalid task data ({prefix}{issue['msg']})"
+    return str(error).strip().splitlines()[0] or type(error).__name__
+
+
+def build_system_prompt(parsed_tools: str) -> str:
+    """Build the MBPP system prompt and tool manual."""
+
+    return (
+        "You are a precise MBPP Python solver. Return the smallest general "
+        "solution and finish quickly.\n"
+        "TOOLS\n"
+        f"{parsed_tools}\n"
+        "RESPONSE CONTRACT\n"
+        "- Every response must contain exactly one complete ```python ... ``` "
+        "block followed by <end_code>, with no text before or after it.\n"
+        "- Your first response must assign complete, runnable source to "
+        "`solution` and immediately call print(run_tests(solution)). Never "
+        "spend an iteration on analysis, comments, docstrings, or debug code.\n"
+        "- Put all source and imports inside `solution`. Outside it, the only "
+        "testing statement allowed is exactly print(run_tests(solution)).\n"
+        "- Call run_tests once with exactly one positional argument. Never pass "
+        "its optional test_list argument, add custom assertions, call candidate "
+        "functions directly, use input(), or redefine tools.\n"
+        "- After all tests pass, the very next response must be exactly:\n"
+        "```python\n"
+        "final_answer(solution)\n"
+        "```<end_code>\n"
+        "SOLVING RULES - APPLY SILENTLY\n"
+        "- Infer the canonical operation from the task name, required signature, "
+        "wording, and every example together. Do not fit isolated examples.\n"
+        "- Before testing, dry-run every public assertion. Check the exact return "
+        "type, ordering, multiplicity, inclusive or exclusive bounds, equality, "
+        "empty inputs, and one-item inputs when relevant.\n"
+        "- On failure, re-read the failing assertion, calculate your actual result "
+        "and compare it with the expected value. Change the assumption this disproves; "
+        "never resubmit equivalent logic or guess unexplained constants.\n"
+        "- Prefer a direct formula, loop, comprehension, standard-library call, "
+        "or small recurrence. Keep code compact enough to finish the response.\n"
+        "- One discriminating test is hidden. Preserve general behavior beyond "
+        "the public examples, including ordering and duplicate handling.\n"
+        "TEMPLATE\n"
+        "```python\n"
+        "solution = '''def add(a, b):\n"
+        "    return a + b\n"
+        "'''\n"
+        "print(run_tests(solution))\n"
+        "```<end_code>"
+    )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CLI for mbpp agent")
@@ -52,11 +114,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-tokens",
         type=int,
-        default=350,
+        default=420,
         help="Maximum output tokens per LLM request",
     )
     args = parser.parse_args()
+    manager = None
+    deadline = TaskDeadline(TASK_TIMEOUT_SECONDS)
     try:
+        deadline.start()
         task_path = Path(args.task_file)
         sandbox_config_path = Path(args.sandbox_config) if args.sandbox_config else None
         with open(task_path, "r") as f:
@@ -75,107 +140,17 @@ if __name__ == "__main__":
             manager = SandboxManager(sandbox_config_path, mcp_config=mcp_config)
             tools = manager.list_tools()
             parsed_tools = "\n".join(tools)
-            task_str = f"{task.task_definition}\nYour function must be declared like this: {task.function_definition}"
-            sys_prompt = (
-                "You are a Python coding agent using code-based tool calling. You solve one MBPP task by iterating:\n"
-                "METHOD\n"
-                "1. Write the function using the EXACT name and signature given in the task, plus any helper you need.\n"
-                "2. Verify it with run_tests before submitting.\n"
-                "3. If the tests don't validate your solution, define the function directly in the code block and call it to print what it returns\n"
-                "4. Compare it with the expected result\n"
-                "5. Fix your code accordingly\n"
-                "6. Submit with final_answer(solution)\n"
-                "You always must test your code with the tools that you can use.\n"
-                "Any other function than the present one in tools section are strictly forbidden\n"
-                "TOOLS\n"
-                f"{parsed_tools}\n"
-                "final_answer(code) to submit your code if it's valid\n"
-                "CONSTRAINTS\n"
-                "- Budget is tight (10 iterations max, small token budget). Aim to finish in 2-3 steps.\n"
-                "- Solution must be self-contained: include the imports it needs, no test code, no input().\n"
-                "- Do not re-explain the problem or restate code you already wrote.\n"
-                "EXAMPLE\n"
-                "- First example\n"
-                "Task: write a function `add(a, b)` that returns the sum.\n"
-                "[ASSISTANT]\n"
-                "Thought: Simple, I write it and test it right away.\n"
-                "```python\n"
-                "solution = '''def add(a, b):\n"
-                "    return a + b\n"
-                "'''\n"
-                "print(run_tests(solution))\n"
-                "```<end_code>\n"
-                "[OBSERVATION]\n"
-                "3/3 tests passed\n"
-                "[ASSISTANT]\n"
-                "Thought: I can validate my solution\n"
-                "```python\n"
-                "final_answer(solution)\n"
-                "```<end_code>\n"
-                "- Second example (debugging a wrong result)\n"
-                "Task: write a function `repocc(string, char, new_char)` that replaces all occurences of a character.\n"
-                "[ASSISTANT]\n"
-                "Thought: I will use `str.replace`.\n"
-                "```python\n"
-                "solution = '''def repocc(string, char, new_char):\n"
-                "    return string.replace(char, new_char, 1)\n"
-                "'''\n"
-                "print(run_tests(solution))\n"
-                "```<end_code>\n"
-                "[OBSERVATION]\n"
-                "1/3 tests passed\n"
-                "[ASSISTANT]\n"
-                "Thought: I need to see what my function actually returns. I define it\n"
-                "directly in the code block and call it.\n"
-                "```python\n"
-                "def repocc(string, char, new_char):\n"
-                "    return string.replace(char, new_char, 1)\n"
-                "print(repocc('hello', 'l', 't'))\n"
-                "```<end_code>\n"
-                "[OBSERVATION]\n"
-                "hetlo\n"
-                "[ASSISTANT]\n"
-                "Thought: The second occurrence of 'l' was not replaced, the count argument is wrong.\n"
-                "```python\n"
-                "solution = '''def repocc(string, char, new_char):\n"
-                "    return string.replace(char, new_char)\n"
-                "'''\n"
-                "print(run_tests(solution))\n"
-                "```<end_code>\n"
-                "[OBSERVATION]\n"
-                "3/3 tests passed\n"
-                "[ASSISTANT]\n"
-                "Thought: I can validate my solution\n"
-                "```python\n"
-                "final_answer(solution)\n"
-                "```<end_code>\n"
-                "- Third example (never submit untested code)\n"
-                "Task: write a function `mul(a, b)` that multiplies a and b and returns the result.\n"
-                "[ASSISTANT]\n"
-                "Thought: I will use the `*` operator.\n"
-                "```python\n"
-                "solution = '''def mul(a, b):\n"
-                "    return a * b\n"
-                "'''\n"
-                "```<end_code>\n"
-                "[OBSERVATION]\n"
-                "stderr: No tests were run. Please use the `run_tests` tool to validate your solution before submitting.\n"
-                "[ASSISTANT]\n"
-                "Thought: I need to test my function with the `run_tests` tool\n"
-                "```python\n"
-                "print(run_tests(solution))\n"
-                "```<end_code>\n"
-                "[OBSERVATION]\n"
-                "3/3 tests passed\n"
-                "[ASSISTANT]\n"
-                "Thought: I can validate my solution\n"
-                "```python\n"
-                "final_answer(solution)\n"
-                "```<end_code>\n"
-                "You need to terminate your responses by <end_code>\n"
-                "You need to provide one python code block at a time, and you need to wait for the observation before providing the next code block.\n"
-                "If all of your tests pass, you must submit your solution with final_answer\n"
+            visible_tests = "\n".join(task.test_list)
+            task_str = (
+                "TASK\n"
+                f"{task.task_definition}\n\n"
+                "REQUIRED SIGNATURE\n"
+                f"{task.function_definition}\n\n"
+                "PUBLIC TESTS (all must pass; hidden tests also exist)\n"
+                f"{visible_tests}\n\n"
+                "Solve the general problem, not only these examples."
             )
+            sys_prompt = build_system_prompt(parsed_tools)
             agent = Agent(
                 sandbox=manager,
                 sys_prompt=sys_prompt,
@@ -189,14 +164,23 @@ if __name__ == "__main__":
                 max_input_tokens=MAX_INPUT_TOKENS,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 max_observation_chars=1500,
-                history_window=6,
+                history_window=4,
             )
             res = agent.execute()
-            try:
-                path = Path(args.output_file)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(res.model_dump_json(indent=4))
-            except (FileNotFoundError, PermissionError) as e:
-                print(f"Error writing output file: {e}")
-    except (FileNotFoundError, PermissionError) as e:
-        print(f"Error reading task file: {e}")
+            deadline.cancel()
+            path = Path(args.output_file)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(res.model_dump_json(indent=4))
+    except TaskDeadlineExceeded as error:
+        print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(124)
+    except KeyboardInterrupt:
+        print("Interrupted.", file=sys.stderr)
+        raise SystemExit(130)
+    except Exception as error:
+        print(f"Error: {_error_summary(error)}", file=sys.stderr)
+        raise SystemExit(1)
+    finally:
+        deadline.cancel()
+        if manager is not None:
+            manager.stop()

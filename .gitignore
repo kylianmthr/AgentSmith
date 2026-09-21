@@ -31,6 +31,7 @@ dist/
 
 # Logs and temporary files
 *.log
+!benchmark_traces/**/validation.log
 *.tmp
 *.swp
 *~
@@ -40,6 +41,3 @@ dist/
 .vscode/
 .DS_Store
 Thumbs.db
-
-# Correcting
-moulinette/

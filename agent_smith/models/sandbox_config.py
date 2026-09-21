@@ -59,6 +59,8 @@ class SandboxConfig(BaseModel):
     @field_validator("authorized_imports")
     @classmethod
     def validate_authorized_imports(cls, imports: list[str]) -> list[str]:
+        """Restrict configured imports to the built-in safe list."""
+
         for module_name in imports:
             if module_name not in SAFE_IMPORTS:
                 raise ValueError(
