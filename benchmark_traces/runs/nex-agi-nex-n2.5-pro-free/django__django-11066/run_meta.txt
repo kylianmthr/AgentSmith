@@ -1,0 +1,9 @@
+provider=openrouter
+api_url=https://openrouter.ai/api/v1
+model=nex-agi/nex-n2.5-pro:free
+task_id=django__django-11066
+agent_args='' 
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=269
+validation_exit=0

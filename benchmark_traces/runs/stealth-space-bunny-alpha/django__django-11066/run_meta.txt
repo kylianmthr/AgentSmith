@@ -1,0 +1,9 @@
+provider=openrouter
+api_url=https://openrouter.ai/api/v1
+model=stealth/space-bunny-alpha
+task_id=django__django-11066
+agent_args='' 
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=14
+validation_exit=0

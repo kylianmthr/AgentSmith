@@ -1,0 +1,30 @@
+warning: `VIRTUAL_ENV=/sgoinfre/qrios/agent_smith_wrapper/AgentSmith/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+
+============================================================
+VALIDATING SOLUTION
+============================================================
+Task ID: django__django-11066
+Benchmark: swebench
+Success claimed: False
+
+============================================================
+STEP 1: CORRECTNESS VALIDATION
+============================================================
+Solution doesn't look like a git patch
+Correctness: FAILED
+
+============================================================
+STEP 2: METRICS VALIDATION
+============================================================
+Iterations: 30 / 30 OK
+Input tokens: 85595 / 300000 OK
+Output tokens: 569 / 10000 OK
+Time: 703.6s / 900.0s OK
+Metrics: VALID
+
+============================================================
+FINAL RESULT
+============================================================
+Correctness: FAILED
+Metrics: VALID
+Overall: FAILED

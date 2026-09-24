@@ -1,0 +1,9 @@
+provider=nvidia
+api_url=https://integrate.api.nvidia.com/v1
+model=z-ai/glm-5.3-flash
+task_id=sympy__sympy-14711
+agent_args='' 
+agent_exit=124
+agent_timed_out=yes
+agent_wall_seconds=930
+validation_exit=-1

@@ -1,0 +1,9 @@
+provider=openrouter
+api_url=https://openrouter.ai/api/v1
+model=cohere/north-mini-code:free
+task_id=sympy__sympy-18189
+agent_args='' 
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=4
+validation_exit=1

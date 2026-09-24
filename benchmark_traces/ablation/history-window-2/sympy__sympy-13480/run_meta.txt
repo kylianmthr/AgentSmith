@@ -1,0 +1,9 @@
+provider=groq
+api_url=https://api.groq.com/openai/v1
+model=qwen/qwen3.8-27b
+task_id=sympy__sympy-13480
+agent_args=--history-window agent_args=2 
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=118
+validation_exit=0

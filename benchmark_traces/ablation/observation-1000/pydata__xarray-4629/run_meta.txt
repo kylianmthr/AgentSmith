@@ -1,0 +1,9 @@
+provider=groq
+api_url=https://api.groq.com/openai/v1
+model=qwen/qwen3.8-27b
+task_id=pydata__xarray-4629
+agent_args=--max-observation-chars agent_args=1000 
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=194
+validation_exit=0

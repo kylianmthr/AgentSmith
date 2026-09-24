@@ -1,0 +1,9 @@
+provider=nvidia
+api_url=https://integrate.api.nvidia.com/v1
+model=z-ai/glm-5.3-flash
+task_id=pydata__xarray-4629
+agent_args='' 
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=824
+validation_exit=0

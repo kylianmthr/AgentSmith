@@ -1,0 +1,8 @@
+provider=openrouter
+api_url=https://openrouter.ai/api/v1
+model=poolside/laguna-s-2.1:free
+task_id=sympy__sympy-18189
+agent_exit=0
+agent_timed_out=no
+agent_wall_seconds=112
+validation_exit=1
